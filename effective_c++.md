@@ -106,3 +106,85 @@
 **TLDR:**
 - **Polymorphic base classes should declare a virtual destructor. A class has any virtual method -> it should have a virtual destructor**
 - **Classes not desiged to be base or polymorphic should not have virtual desctructors**
+
+## Item 8: Prevent destructors from emitting exceptions
+- depending on a condition, multiple simultaneously active exceptions cause either program termination or undefined behaviour
+- if need to run something in destructor that could throw exception, you can do two things: terminate the program (catch and sth::abort()) or swollow the exception (empty catch(), or make log entry in a catch())
+- calling abort may forestall undefined behaviour, reasonable option if the program cannot continue to run after the error
+- in general swallowing exception is a bad idea - it supressed important information, sometimes though it can prevent premature termination and undefined behaviour
+- swallowing exception a viable option only if the program is able to reliable continue execution after an error occurs and is ignored
+- better strategy - design the class interface so that its clients have an opportunity to react to problems that may arise, e.g. wrap a method that could throw exception in additional method with a flag inside
+- if some operation may fail with exception and there may be a need to handle that exception -> the exception has to come from a non-destructor funtion
+
+**TLDR:**
+- **Destructors should NEVER emit exceptions. If function called in destructor may throw, catch and terminate or swallow**
+- **If clients need to be able to react to exception, class should provide a regular (not a destructor) method that performs operation in question**
+
+## Item 9: Never call virtual methods during construction and destruction
+
+- Base class parts of derived class objects always constructed before derived class parts
+- during base class construction virtual functions never go down into derived classes
+- during base class construction of a derived class object, the type of the object IS that of the base class, and is treated like that
+- one way to avoiding call of virtual function in constructor is making a function non-virtual with parameters and pass args from derived class constructors
+- make the method above static - then no danger of accidentally using yet-uninitialized data members
+
+**TLDR:**
+**Never call virtual methods during construction and destruction - such call will never go to a more derived class than that of the currently executing constructor or destructor**
+
+## Item 10: Have assignment operators always return a reference to *this
+
+- assignment is right-associative (x = y = z = 15 <=> x = (y = (z = 15)))
+- Follow this convention with custom assignment operators using return *this
+- Applies also to +=, -=, *= etc.
+- it's only a convention but followed by all the built-in types, STD types, etc.
+
+**TLDR:**
+**Make assignment operators return a reference to \*this**
+
+## Item 11: Handle assignment to self in operator=
+
+- aliasing = more than one way to refer to an object
+- identity test - (`if(this == &rhs) return *this`)
+- avoid having pointers to deleted objects
+- making operator= exception-safe usually also self-assignment-safe
+- ordering of statements (like deleting a pointer only after it's been used) can assure that
+- alternative techinque for exception-safety - "copy and swap"
+
+**TLDR:**
+- **Use techniques like coparing addresses, careful statement ordering and copy-and-swap to assure operator= is well behaved**
+- **Make sure that any funtion that operates on more than one object behaves correctly if two or more objects are the same**
+
+## Item 12: Copy all parts of an object
+
+- In a well-design system only two functions copy object - copy constructor and copy assignment operator (copying functions)
+- Most compilers won't complain about if not all of data is copied by copying functions
+- if you add a data member to your class, you need to make sure to update copying functions (also constructors)
+- issues especially prone to happen with inheritance
+- fix issues with inheritance by copying the base class parts - typically private so invoke corresponding base class copying funtioncs
+- don't call one copying function in another
+- use shared `init()` function to avoid code duplication is similar code in copy constructor and copy assignment operator
+
+**TLDR:**
+- **Copying functions should copy ALL of object's data members and ALL of its base class parts**
+- **Don't call one of copying functions from another. Put common functionality in a third function and use it in both**
+
+## Item 13: Use objects to manage resources
+
+- Other than memory, some other resource examples are: file descriptors, mutex locks, fonts and brushes in GUIs, database connections, network sockets
+- "Manual" resource management is error-prone as code changes over time (people adding breaks, returns, exception throws etc.)
+- automatically control resource management by putting resource inside objects
+- smart pointers (like std::auto_ptr) automatically release memory in their destructors
+- two critical aspects of using objects to manage resources: a) resources are aquired and immedaitely passed to resource-managing objects, b) resource-managing objects use destructors to ensure resource release
+- using objects to manage resources ofter called RAII (Resource Acquisition Is Initialization) - common practice to acquire a resource and initialize a resource-managing object in the same statement
+- sometimes acquired resources assigned to objects instead of initializing them
+- example of RAII - `std::auto_ptr<SomeObject> pso(returnPtrToSomeObject())`
+- reference-counting smart pointer (RCSP), e.g. shared_ptr - keeps track of how many objects point to particular resource
+- RCSPs can't break cycles of references (two otherwise unused objects pointing to one another)
+- don't use shared_ptr or auto_ptr for dynamically aloccated arrays in C++ (they use `delete` instead of `delete[]`). If you need this, look to Boost
+(scoped_array, shared_array)
+- bottom line - if you're releasing memory manually, you're doing something wrong
+- returning of a raw pointer type - bad idea, invitation to a resource leak
+
+**TLDR:**
+- **To prevent resource leaks, use RAII objects that acquire resources in their constructors and release them in the destructors**
+- **There are some commonly used RAII classes like std::shared_ptr, std::unique_ptr, etc.**
