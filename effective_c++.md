@@ -1,6 +1,8 @@
-# Effectiver C++
+# Effective C++
 
-## Item 1: View C++ as a federation of languages
+## Accustoming yourself to C++
+
+### Item 1: View C++ as a federation of languages
 - C
 - O-O C++
 - Template C++
@@ -10,7 +12,7 @@
 
 **Rules for effective programming in C++ depend on the part of C++ used.**
 
-## Item 1: consts, enums, inlines > defines
+### Item 2: consts, enums, inlines > defines
 
 - "Prefer the compiler to the preprocessor"
 - name gets "removed" by preprocessor before it gets to the compiler -> hard to track down
@@ -24,7 +26,7 @@
 - **Prefer const or enums over defines**
 - **For function-like macros prefer inline functions over defines**
 
-## Item 3: Use const whenever possible
+### Item 3: Use const whenever possible
 
 - sometimes it makes sense to return const value (e.g. operator overload)
 - bitwise constness: method is const if it doesn't modify any of the object's data
@@ -38,7 +40,7 @@
 - **Compiler enforces bitwise constness, but you should program using logical constness**
 - **Avoid code duplication by having non-const method version call the const version**
 
-## Item 4: Initialize object before usage
+### Item 4: Initialize object before usage
 
 - For non-member object of build-it types - manually initialize
 - For almost everything else - constructor responsible for initialization everything in the object
@@ -60,7 +62,11 @@
 - **list data in initialization list in the same order as declated in the class**
 - **Replace non-local static objects with local static objects to prevent initialization order issues accross translation units**
 
-## Item 5: Know what functions C++ silently writes (and calls)
+****
+
+## Constructors, Destructors, Assignment Operators
+
+### Item 5: Know what functions C++ silently writes (and calls)
 
  - if not explicitly declared, compiler will declare: copy constructor, copy assignment operator, desctructor
  - if no constructor declared - also a default constructor
@@ -70,7 +76,7 @@
  **TLDR:**
  **Compiler may explicitly generate: default constructor, copy constructor, copy assignment operator, destructor.**
 
-## Item 6: Disallow the use of compiler-generated functions you don't want
+### Item 6: Disallow the use of compiler-generated functions you don't want
 
 - you could forbid a copy of an object if e.g. you want each copy to be unique
 - prevent autogeneration by declaring
@@ -84,7 +90,7 @@
 **TLDR:**
 **TO disallow methods autogeneration by compiler, declare the corresponding methods private and give them no implementations.**
 
-## Item 7: Declare destructors virtual in polymorhic base classes
+### Item 7: Declare destructors virtual in polymorhic base classes
 
 - relecant with base class pointers used
 - factory function - returns a base class pointer to a newly-created derived class object
@@ -107,7 +113,7 @@
 - **Polymorphic base classes should declare a virtual destructor. A class has any virtual method -> it should have a virtual destructor**
 - **Classes not desiged to be base or polymorphic should not have virtual desctructors**
 
-## Item 8: Prevent destructors from emitting exceptions
+### Item 8: Prevent destructors from emitting exceptions
 - depending on a condition, multiple simultaneously active exceptions cause either program termination or undefined behaviour
 - if need to run something in destructor that could throw exception, you can do two things: terminate the program (catch and sth::abort()) or swollow the exception (empty catch(), or make log entry in a catch())
 - calling abort may forestall undefined behaviour, reasonable option if the program cannot continue to run after the error
@@ -120,7 +126,7 @@
 - **Destructors should NEVER emit exceptions. If function called in destructor may throw, catch and terminate or swallow**
 - **If clients need to be able to react to exception, class should provide a regular (not a destructor) method that performs operation in question**
 
-## Item 9: Never call virtual methods during construction and destruction
+### Item 9: Never call virtual methods during construction and destruction
 
 - Base class parts of derived class objects always constructed before derived class parts
 - during base class construction virtual functions never go down into derived classes
@@ -131,7 +137,7 @@
 **TLDR:**
 **Never call virtual methods during construction and destruction - such call will never go to a more derived class than that of the currently executing constructor or destructor**
 
-## Item 10: Have assignment operators always return a reference to *this
+### Item 10: Have assignment operators always return a reference to *this
 
 - assignment is right-associative (x = y = z = 15 <=> x = (y = (z = 15)))
 - Follow this convention with custom assignment operators using return *this
@@ -141,7 +147,7 @@
 **TLDR:**
 **Make assignment operators return a reference to \*this**
 
-## Item 11: Handle assignment to self in operator=
+### Item 11: Handle assignment to self in operator=
 
 - aliasing = more than one way to refer to an object
 - identity test - (`if(this == &rhs) return *this`)
@@ -154,7 +160,7 @@
 - **Use techniques like coparing addresses, careful statement ordering and copy-and-swap to assure operator= is well behaved**
 - **Make sure that any funtion that operates on more than one object behaves correctly if two or more objects are the same**
 
-## Item 12: Copy all parts of an object
+### Item 12: Copy all parts of an object
 
 - In a well-design system only two functions copy object - copy constructor and copy assignment operator (copying functions)
 - Most compilers won't complain about if not all of data is copied by copying functions
@@ -168,7 +174,11 @@
 - **Copying functions should copy ALL of object's data members and ALL of its base class parts**
 - **Don't call one of copying functions from another. Put common functionality in a third function and use it in both**
 
-## Item 13: Use objects to manage resources
+****
+
+## Resource Management
+
+### Item 13: Use objects to manage resources
 
 - Other than memory, some other resource examples are: file descriptors, mutex locks, fonts and brushes in GUIs, database connections, network sockets
 - "Manual" resource management is error-prone as code changes over time (people adding breaks, returns, exception throws etc.)
@@ -188,3 +198,14 @@
 **TLDR:**
 - **To prevent resource leaks, use RAII objects that acquire resources in their constructors and release them in the destructors**
 - **There are some commonly used RAII classes like std::shared_ptr, std::unique_ptr, etc.**
+
+### Item 14: Carefully think about copying behavior in resource-managing classes
+
+- another example of resource to be managed is locking and unlocking mutexes
+- if RAII object copied, you should choose one of the following: prohibit copying (declare copying operations private), reference-count to underlying resource (you can use shared_ptr for that), copy the underlying resource (deep copy - should copy both object and the resource it wraps), transfer ownership of the underlying resource (e.g. auto_ptr)
+- shared_ptr allows specification of a "deleter" - a function or function object to be called when the reference count goes to zero
+
+**TLDR:**
+- **Copying of RAII object means also copying managed resource, so copying behavior of the resources should determin the copying behavior of the RAII object**
+- **Common copying behaviors - forbid copying, reference count, deep copy and ownership transfer**
+
