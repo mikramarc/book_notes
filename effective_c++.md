@@ -209,3 +209,61 @@
 - **Copying of RAII object means also copying managed resource, so copying behavior of the resources should determin the copying behavior of the RAII object**
 - **Common copying behaviors - forbid copying, reference count, deep copy and ownership transfer**
 
+### Item 15: Provide access to raw resources in resource-manging classes
+
+ - sometimes APIs refer to resources (raw data) directly
+ - you need to convert RAII object, two general ways: explicit conversion and explicit conversion
+ - explicit conversion -> return (a copy of) raw pointer (e.g. inside a smart pointer), e.g. with a get() method for shared_ptr
+ - implicit conversion - allow access to underlying data (e.g. by overloading and using -> and * operators)
+- an alternative to explicit conversion using get() - implicit conversion function (`operator T() const { return val; }`)
+- downside of implicit conversions - increased chance of error, e.g. when using copy assignment operator
+- ofter explicit conversion is preferable -> minimizes chance of unintended conversions, not always the case - design decision
+- functions returning raw resources in RAII classes aren't contrary to encapsulation - those classes' purpuse is to handle resrouces, not encapsulate
+
+**TLDR:**
+- **Each RAII class sould offer a way to access resource it manages - API's often require access to raw resouces**
+- **Access may be through explicit or implicit conversion. In general, explicit conversions are safer, while implicit conversions more convenient to use**
+
+### Item 16: Use same form in corresponding used of new and delete
+
+- when you call `new`, two things happen - memory is allocated and one or more constructors for that memory are called
+- when you call `delete` also two things happen - one or more destructors are called, then the memory is released
+- memory for an array usually includes size of the array - ease for delete to know how many destructors to call
+- if you delete on a pointer, you need to specify whether it's an array or not
+- using incorrect `delete` leads to undefined behavior
+- to avoid confusion regarding destruction, avoid typedeft for array types
+
+**TLDR**
+**If you use [] in a new expression, you must use [] in a corresponding delete expression, and vice versa.**
+
+### Item 17: Store new-ed objects in smart pointers in standalone statements
+
+- it's possible to leak resources even when using only RAII objects
+- e.g. compiler can decide in what order arguments passed to a funtion are processed
+- e.g. in a function call if arguments passed are function calls, one of them might throw exception while in another arg you're passing `new` to a smart pointer (`some_function(std::shared_ptr<someObj>(new someObj), other_function())`)
+- to avoid that use a separate statement to pass resource to a RAII object, only then pass it - less leeway in reordering operations for the compiler
+
+**TLDR:**
+**Store new objects in smart pointer in standalone statements**
+
+****
+
+## Designs and Declarations
+
+### Item 18: Make interfaces easy to use correctly and difficult to use incorectly
+
+ - if the client attempts to use interface incorrectly, it should not compile
+ - can use structs/classes instead of basic types to enforce correct argument passing (e.g. `Hour(const Minute& m, const Hour& h)` instead of `Hour(int minute, int hour)`)
+ - you can use static methods returning call to private constructor in a class to enforce specific values set (e.g. `static Month Jan() {return Month(1);}`)
+ - you can also impose restrictions adding `const` (e.g. returning a const value from assignment operator)
+ - interfaces should behave consistently
+ - interface that requires client to remember something is prone to incorrect use
+ - you can use a deleter in shared pointer to enforce specific behavior upon deleting
+ - "cross-DLL problem" - object created by `new` in one DLL deleted in another DLL
+ - shared pointer is biggerr than raw pointer, slower than raw pointer and uses auxiliary dynamic memory - but reduces client errors
+
+ **TLDR:**
+ - **Good interface = easy to use correctly, hard to use incorrectly**
+ - **Facilitate correct use with consistency in interfaces and behavioral compatibility with build-in types**
+ - **Ways to prevent errors include: creating new types, restricting operations on types, constraining object values, eliminating client resource management responsibilities**
+ - **shared_ptr supports custom deleters - prevents cross-DLL problem or can be used to automatically unlock mutexes**
