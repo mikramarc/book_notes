@@ -280,4 +280,44 @@ Consider:
 
 **TLDR: Class design = type design**
 
- 
+### Item 20: Prefer pass-by-const-reference to pass-by-value
+
+- when you pass by value you call all the copy constructors (original object, parent object, class member objects)
+- same goes for destructors
+- passing by const-reference is much more efficient
+- avoids "slicing" problem - when a derived class object is passed (by value) as a base class object, the base class copy constructor is called -> specialized features that make the object behave like a derived class object are "sliced off"
+- references are typically implemented as pointers, so passing by reference usually really means passing by pointer
+- for built-ins usually more efficient to pass by value
+- small class -> doesn't mean copying is cheap, they could point to a very large object
+- compilers tend to treat used defined classes and built-in types differently, even when same underlying representation
+- user-defined types not good candidates to be passed by value - they are subject to change
+
+**TLDR:**
+- **Prefer pass-by-const-reference over pass-by-value - typically more efficient and avoids slicing problem**
+- **Passing by value ok for built-in types, STL iterator and function object types**
+
+### Item 20: Dn't try to return a reference when you're supposed to return an object
+
+- do not pass reference to the object that does not exist
+- reference is just a name of some (already existing) object
+- two ways of creating new object by function - on the stack or on the heap
+- creation on the stack - local variables
+- don't return reference to a local object it will be immediately destroyed when funtion goes out of scope -> results in undefined behavior
+- any function returning reference to a local object is broken, some for pointer to a local object
+- creation on the heap - using `new`
+- static objects - could affect thread-safety
+- do not use static objects defined inside a function to try to return const reference
+- the right way to write a funtion that must return a new object -> have that funtion return a new object
+- between returning a value and returning a reference, choose what renders correct behavior, let the compiler worry about optimization
+
+**TLDR: Never return a reference or a pointer to a local stack object, a reference to heap-allocated object or a reference or a pointer to a local static object (if there is a chance that more than one such object will be needed)**
+
+### Item 21: Declare data members private
+- reasons to not have public data members: syntactic consistency (you just use functions to access objects), using functions gives more control over accessibility, encapsulation (if you use funtion to retrive a data member, you can replace that member later with a computation, etc. and clients won't know)
+- other reasons to hide data members behind functional interfaces: option to notify other objects when data is written or read, to verify class invariants and function pre/post-conditions, performing synchronization in threaded environments, etc.
+- public = unencapsulated = effectively unchangable
+- same goes for protected data - changes in the unencapsulated data might break all the derived classes
+
+**TLDR:**
+- **Declare data members private - gives syntactucally uniform access, allows fine-grained access control, allows invariants to be enforced, and offers class authors implementation flexibility**
+- **protected is effectively no more encapsulated than public**
