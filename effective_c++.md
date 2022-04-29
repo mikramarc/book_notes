@@ -296,7 +296,7 @@ Consider:
 - **Prefer pass-by-const-reference over pass-by-value - typically more efficient and avoids slicing problem**
 - **Passing by value ok for built-in types, STL iterator and function object types**
 
-### Item 20: Dn't try to return a reference when you're supposed to return an object
+### Item 21: Dn't try to return a reference when you're supposed to return an object
 
 - do not pass reference to the object that does not exist
 - reference is just a name of some (already existing) object
@@ -312,7 +312,7 @@ Consider:
 
 **TLDR: Never return a reference or a pointer to a local stack object, a reference to heap-allocated object or a reference or a pointer to a local static object (if there is a chance that more than one such object will be needed)**
 
-### Item 21: Declare data members private
+### Item 22: Declare data members private
 - reasons to not have public data members: syntactic consistency (you just use functions to access objects), using functions gives more control over accessibility, encapsulation (if you use funtion to retrive a data member, you can replace that member later with a computation, etc. and clients won't know)
 - other reasons to hide data members behind functional interfaces: option to notify other objects when data is written or read, to verify class invariants and function pre/post-conditions, performing synchronization in threaded environments, etc.
 - public = unencapsulated = effectively unchangable
@@ -321,3 +321,54 @@ Consider:
 **TLDR:**
 - **Declare data members private - gives syntactucally uniform access, allows fine-grained access control, allows invariants to be enforced, and offers class authors implementation flexibility**
 - **protected is effectively no more encapsulated than public**
+
+### Item 23: Prefer non-member non-friend functions to member functions
+
+- encapsulation - allows flexibility to change things in a way that affects only limited number of clients
+- the less code (functions) can access data, the more data is encapsulated
+- non-member non-friend functions don't decrease encapsulation since they don't increase number of functions that can access private data
+- just because encapsulation-related concers dictate a function be a a non-member non-friend of one class, it doesn't mean it cannot be a member of another class
+- natural approach - make function a non-member non-friend function in the same namespace as the original class
+- good approach with "convenience functions"
+- namespaces, unlike classes, can be spread across multiple source files
+- declare specific-stuff-related convenience functions in different header files - exactly how C++ standard library is organized
+- spreading across multiple source files allows clients to not be compilation-dependent on stuff they don't need
+- partitioning functionality like this is not possible with class member functions - class can't be split into pieces between files
+- putting convenience funtions in multiple header files (but same namespace) also allows for easy extension of the set of convenience functions - another feature classes don't offer
+
+**TLDR: Prefer non-member non-friend functions over member functions - it increases encapsulation, packing flexibility, and functional extensibility.**
+
+### Item 24: Declare non-member functions when type conversions should apply to all parameters
+
+- having class support implicit conversions - generally a bad idea (not always though)
+- compilers can do implicit conversions if the constructor allows it (non-explicit constructor)
+- parameters are eligible for implicit type conversion *only if listed in the parameter list*. 
+- whenever you can avoid friend functions, you should
+
+**TOLD: If you need type conversions on all function's parameters (including the one that would otherwise be pointed to by the *this* pointer), the function must be a non-member**
+
+### Item 25: COnsider support for a non-throwing swap
+
+- swap is very useful, so important to implement it properly
+- swap two items = give each the other's value
+- as long as your types support copying, the default std swap will let your objects be swapped without issues
+- default swap performs thee copying operations - could be slow
+- primarily a problem for classes pointing to another class with implementation ("pimpl idiom")
+- `template <>` = total template specialization (specialization for specific type)
+- we're not allowed to alter contents of std, but we are allowed to totally specialize standard templates for our own types
+- to alter std::swap make a public swap funtion and use it within std::swap
+- C++ allows partial specialization of class templates, but not function templates
+- when you want to partially specialize a function, typically you overload it - not possible for std, though - altering contents prohibited
+- way to do this - make a swap in your namespace and due to name lookup rules in C++ (argument-dependant lookup / Koenig lookup) it will be found
+- for classes do both non-member swap in you class's namespace and the specialization
+- desirable is to use T-specific version if there is one, but to fall back to std one it there isn't one - you can force that using `using std::swap`
+- calling `std::swap(...)` forces compiler to use std version
+- member version of swap should never throw exceptions (applies only to the member version)
+
+**TLDR:**
+- **Provide a swap member function when std::swap inefficient for your type and make sure it doesn't throw exceptions**
+- **if you offer a member swap, also offer a non-member swap that calls the member. For classes (but not templates) specialize std::swap as well**
+- **when calling swap, employ a using declaration for std::swap and call swap without namespace qualification**
+- **it's ok to totally specialize std templates for user-defined types, but never try to add anything completely new to std**
+
+## Implementations
