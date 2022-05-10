@@ -347,7 +347,7 @@ Consider:
 
 **TOLD: If you need type conversions on all function's parameters (including the one that would otherwise be pointed to by the *this* pointer), the function must be a non-member**
 
-### Item 25: COnsider support for a non-throwing swap
+### Item 25: Consider support for a non-throwing swap
 
 - swap is very useful, so important to implement it properly
 - swap two items = give each the other's value
@@ -371,4 +371,73 @@ Consider:
 - **when calling swap, employ a using declaration for std::swap and call swap without namespace qualification**
 - **it's ok to totally specialize std templates for user-defined types, but never try to add anything completely new to std**
 
+****
+
 ## Implementations
+
+### Item 26: Postpone variable definitions as long as possible
+
+- avoid unused variables whenver you can, e.g. when an exception is thrown
+- postpone variable definition until you are sure you will need it
+- avoid (potentially expensive) default construction if possible
+- postpone variable definition until right before you use it, but also until you have initialization arguments for it - you avoid potentially unnecessary construction/destruction, and unnecessary default construction
+- when it comes to loops it depends whether construction/destruction or copy assignment is cheaper
+- also, defining outside of the loop make larger scope - usually contrary to program comprehensability and maintainability - so unless assignment is cheaper than construction-destruction and you have a performance sensitive code, construct-destruct within the loop
+
+**TLDR: Postpone variable definitions as long as you can - it increases program clarity and improves efficiency**
+
+### Item 27: Minimize casting
+
+- old style casts (C style) - `(T) expression` or `T(expression)`
+- new style casts: `const_cast<T>`, `dynamic_cast<T>`, `reinterpret_cast<T>` and `static_cast<T>`
+- `const_cast` - casts away constness of objects. Only cast that does that.
+- `dynamic_cast` - primarily used to perform "safe downcasting", i.e. determining whether an object is of a particular type in an inheritance hierarchy. Only cast that cannot be done using old style cast, it can aplso have significant runtime cost
+- `reinterpret_cast<T>` - low-level casts yielding implementation-dependant results, e.g. casting a pointer to an int. Should be rare outside low-level code
+- `static_cast<T>` - can be used to force implicit conversions (e.g. non-const object to const object, int to double, etc.). Also reverse, e.g. void* pointer to typed pointer, base-pointer to derived pointer, etc. Cannot do const to non-const, though.
+- old style casts still legal but new ones preferable - easier to identify, more narrowly specified purpose
+- type conversions often lead to code executed at runtime
+- single object might have more than one address (e.g. its address when pointed to by Base* and address when pointed by Derived*). With multiple inheritance virtually all the time, with single, sometimes too.
+- often if you find youself wanting to cast, it's a sign that you could be approaching things the wrong way - especially the case for dynamic_cast.
+- many implementations of dynamic_cast are quite slow, e.g. based on class names string comparison
+- dynamic_cast generally used when yuo want to perform derived class operations on (what you believe) to be a derived class object but you only have a pointer- or reference-to-base available
+- you should always avoid cascading dynamic_casts (e.g. if - else - else - ... with different dynamic_casts) - generates code that is big and slow
+
+**TLDR:**
+- **Avoid casts whenever practical, especially dynamic_casts in performcance-sensitive code. If casting required in a design, try to come up with a cast-free alternative**
+- **when casting necessary, try to hide it inside a function so clients can avoid casts in their own code**
+- **prefer C++ style casts to old style casts - easier to see and more specic about what they do**
+
+### Item 28: Avoid returning "handles" to object internals
+
+- Data member is only as encapsulated as the most accessible function returning a reference to it
+- even if a member funtion is const but returns a reference to data associated with an object that is stored outside the object itself, the caller to the function can modify the date
+- same issues with pointers and iterators
+- also, you should not have a member funtion return a pointer to a less accessible member function
+- instead, return const reference instead of just reference
+- still can lead to problems, like "dangling handles" - handles that refer to parts of objects that don't exist anymore, e.g. pointer points to return value that is local scope only and will get destroyed soon
+- returning handles to internal parts of an object is always dangerous
+- doesn't mean you should never do it - sometimes you have to
+
+**TLDR: Avoid returning handles (references, pointers or iterators) to object internals when possible. Not returning handles increases encapsulation, helps const member functions be const and minimizes the risk of creation of dangling handles**
+
+### Item 29: Strive for exception-safe code
+
+- 2 requirements for exception safety: leak no resources and don't allow data structures to become corrupted
+- resource management classes can make functions shorter
+- exception safe functions offer one of three guarantees: a) basic guarantee - if an exception is thrown, everything in the program remains in a valid state (no objects or data structures become corrupted etc.), b) strong guarantee - if an exception is thrown, the state of the program is unchanged, c) nothrow guarantee -  functions promise to never throw exceptions
+- exception-safe code must offer on of the three guaranetees above
+- your code should always be exception-safe (accept maybe when dealing with exception-unsafe legacy code)
+- as a general rule, you want to offer the strongest guarantee that's practical - offer nothrow if you can but for most functions it will be between basic and strong guarantees
+- general design strategy that typically leads to the strong guarantee - "copy and swap"
+- "copy and swap" in principle: make a copy of the object you want to modify, then make all needed chages on that copy
+- "pimpl idiom" - putting all the per-object data from the "real" object into a separate implementation object, then giving the real object a pointer to its implementation object
+- copy-and-swap doesn't always guarantee that the overall function is strongly exception-safe, e.g. there might be other functions within that could change the guarantee, e.g. they don't operate only on the local state (side-effects)
+- another problem with copy-and-swap is efficiency - copying can be costly
+- strong guarantee always desirable, but not always practical
+- if strong-guarantee not practical, offer basic guarantee
+- when writting new code or modifying existing one, think about how to make it exceptin-safe - use objects to manage resources, determine which three exception safety guarantees is the strongest you can practically offer, settle for no guarantee onfly if legacy code leaves you no choice, document your decisions
+
+**TLDR**
+- **Exception-safe functions leak no resources and allow no data structures to become corrupted, even when exceptions are thrown. Such functions offer: basic, strong or nothrow guarantees**
+- **Strong guarantee can be often implemented via copy-and-swap but it's not practical for all functions**
+- **A function can usually offer a guarantee no stronger than the weakest guarantee of the functions it calls**
