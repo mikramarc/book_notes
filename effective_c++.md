@@ -441,3 +441,66 @@ Consider:
 - **Exception-safe functions leak no resources and allow no data structures to become corrupted, even when exceptions are thrown. Such functions offer: basic, strong or nothrow guarantees**
 - **Strong guarantee can be often implemented via copy-and-swap but it's not practical for all functions**
 - **A function can usually offer a guarantee no stronger than the weakest guarantee of the functions it calls**
+
+### Item 30: Understand inlining
+
+- inline function: saves overhead of a funcion call
+- inlining may enable compilers to perform context-specific opimizations
+- inlining is likely to increase the size of your object code - could be problem with machines with limited memory
+- inline-induced bloating can lead to additional paging, reduced instruction cache hit rate and performance penalties that accompany these things
+- in inline function very small the code generated may be smaller than the one for function call
+- inlining is a request to a compiler, not command
+- implicit request - defining a function inside a class definition - usually members but could also be friends
+- explicit request - inline keywaord
+- inline functions must typically be in header files - most build environments do inlining during compilation
+- templates usually in header files - compilers need to know what it looks like in order to instantiate it when it's used
+- templating independent from inlinig
+- most compilers refuse to inline functions them deem too complicated (e.g. with loops or recursive)
+- mostly virtual functions refused - quite obvious
+- compilers typically don't perform inlining across calls through function pointers
+- constructors/destructors bad candidates for inlining - sometimes compilers can auto-generate code in them
+- if f is an inline function in a library, clients of the library compile the body of f into their applications - need for recompilation if f changes; if f non-inline clients only need to relink
+- most debuggers have trouble with inline functions
+- strategy: initially don't inline anything (apart from functions that must be inline or are truly trivial (e.g. one return))
+- 80/20 rule in coding - most programs spend 80% of it's time running 20% of your code
+
+**TLDR:**
+- **Limit most inlining to small, frequently called functions. This facilitatess debugging and binary upgradeability, minimizes potential code bloating, and maximizes the chances of greater program speed**
+- **Don't declare function templates inline just because they appear in headers**
+
+### Item 31: Minimize compilation dependencies between files
+
+- C++ doesn't do great with separating interfaces from implementations - class definition specifies not only an interface but also some implementation details
+- "pimpl idiom" - two classes, one for interface only, one implementing the interface (holding the data)
+- pimpl - replacement of dependencies ons definitions with dependencies on declarations
+- essence of minimizing compilation dependencies: make your header files self-sufficient whenever it's practical, and when it's not, depend on declarations in other files, not definitions
+- desing strategy: a) avoid using objects when object references and pointers will do (you can define reference and pointer to a type with only a declaration for the type, defining object requires presence of type's definition), b) depend on class declarations instead of definitions whenver you can, c) provide separate header files for declarations and definitions
+- you *never* need a class definition to declare a function using that class
+- Interface class - special kind of abstarct base class specifyin an interface for derived class
+- like with Handle classes (pimpl), clients of Interface classes need not recompile unless the Interface class interface is modified
+ - you can write create method in interface to create objects enforcing the interfaces
+ - two most common mechanisms for implementing an Interface class - inherit interface specification from the Interface class, implement the functions in the interface
+ - Handle classes and Interface classes - decouple interfaces from implementations = reduce compilation dependencies between files
+ - cost for those methods - some speed at runtime + additional memory per object
+ - Handle - member functions go through implementation pointer (adding one level of access indirection), adds the size of implementation pointer to the memory required ro store each object, plus the implementation pointer has to be initialized (dynamically allocated memory)
+ - Interfaces - every function call virtual - cost of an indirect jump each time function called, plus objects derived from the Interface class must contain virtual table pointer - more memory needed to store an object
+ - neither Handle not Interface classes can get much use our of inline functions
+
+ **TLDR**
+ - **General idea behing minimizing compilation deps - depend on declarations instead of definitions. Two approaches based on this idea are Handle and Interface classes**
+ - **Library header files should exist in full and declaration-only form**
+
+ ****
+
+ ## Inheritance and Object-Oriented Design
+
+ ### Item 32: Make sure public inheritance models "is-a"
+
+ - class D publicly inherits from class B = every object of type D is also of type B, but not vive versa
+ - any function that expects an argument of type B will also take a type D (or pointer-to-D/reference-to-D)
+ - only true for public inheritance
+ - there is no idea design for ALL software - always context dependant
+ - good interfaces prevent invalid code from compiling - better to reject undesired behavior at compile time rather than runtime
+ - public inheritance asserts that everything that appliess to base class objects (everything!) also applies to derived class objects
+
+ **TLDR: Public inheritance means "is-a". Everything that applies to base class must also apply to derived class, because every derived class object is a base class object**
