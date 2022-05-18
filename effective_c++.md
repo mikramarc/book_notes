@@ -504,3 +504,19 @@ Consider:
  - public inheritance asserts that everything that appliess to base class objects (everything!) also applies to derived class objects
 
  **TLDR: Public inheritance means "is-a". Everything that applies to base class must also apply to derived class, because every derived class object is a base class object**
+
+ ## Item 33: Avoid hiding inherited names
+
+ - names in inner scopes hide ("shadow") names in outer scopes
+ - types don't matter when it comes to hiding
+ - scope of derived class nested inside base class's scope
+ - compilers search scopes from the most inner to the most outer
+ - same way for hiding goes for functions with different argument types
+ - override C++'s default hiding of inherited names with "using" declarations (`using Base::func;`)
+ - if you inhering from a base class with overloaded functions and you want to redefine or override only some of them, you need to include a "using" declaration for each name you'd otherwise be hiding - otherwise some names will be hidden
+ - "using" used in public part - names that are public in base class should be also public in a publicly derived class
+ - for private inheritance, use forwarding function (`virtual void f() {Base::f();}`)
+
+ **TLDR:**
+ - **Names in derived classes hide names in base classes - under public inheritance never desirable**
+ - **To make hidden names visible, use "using" declarations or forwarding functions**
