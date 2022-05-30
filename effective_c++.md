@@ -520,3 +520,85 @@ Consider:
  **TLDR:**
  - **Names in derived classes hide names in base classes - under public inheritance never desirable**
  - **To make hidden names visible, use "using" declarations or forwarding functions**
+
+## Item 34: Differentiate between inheritance of interface and inheritance of implementation
+
+- you can want to inherit interface (declaration) of member functions, implementations with option to override, or implementations without option to override
+- member function interfaces are always inherited
+- pure virtual functions - must be redeclared
+- purpose of declaring a pure virtual function is to have derived class inherit a function interface only
+- it is possible to provide definition for a pure virtual function - C++ wouldn't complain, but the only way to call it would be to qualify the call with the class name (generaly of limited utility)
+- purpose of declaring a simple virtual functions is to have derived class inherit a function interface as well as a default implementation ("You got to support this function, but if you don't want to write your own, fall back to the base class version")
+- it can be dangerous to allow simple virtual functions to specify both interface and implementation - risk of forgetting to redifine when needed
+ - it's possible to offer defualt behavior to derived class but not unless they ask for it, sever connection between interface and default implementation (make simple virtual into pure virtual and have it call some default protected non-virtual)
+ - some people object to this idea (pollutes the class namespace). ANother way is to take advange of possibility to have implementation of pure virtual function (call it with base class name qualifier in derived class function implementations) - issue is that now the implementation is public
+ - the purpose of declaring a non-virtual function is to have derived classes inhering a function interface as well as a **mandatory** implementation
+ - non-virtual function identifies *invariant* over specialization, should never be redefined in a derived class
+ - mistake: make all functions non-virtual - makes no room for specialization in derived classes (unless not intended for being derived)
+  - using 80/20 rules - on average 80% of your function calls can be virtual without having detectable impact on performance
+  - mistake: declare all member functions virtual - can be right for Interface classes, however some functions should *not* be redefinable and you should state that if necessary (by amking them non-virtual)
+
+  **TLDR:**
+  - **inheritance of interface is different from inheritance of implementation - under public inheritance, derived classes always inhering base class interface**
+  - **pure virtual functions specify inheritance of interface onlky**
+  - **simple virtual functions specify inheritance of interface plus default implementation**
+  - **non-wirtual functions specify inheritance of interface plus mandatory implementation**
+
+## Item 35: Consider alternatives to virtual functions
+
+- Alternative 1: Template method pattern via the non-virtual interface idiom
+- non-virtual interface idiom (NVI) - having clients call private virtual function indirectly through public non-virtual member function (particular manifestation of Template Method design pattern)
+- Having a wrapper ensures that before a virtual function is called, the proper context can be set up and cleaned up (e.g. locking mutex, making a log entry, etc.) - no really a good way to do that if you let clients call virtual function directly
+- derived classes may redefine private inhjerited virtual functions = perfectly sensible
+- Under NVI idiom, it's not strictly necessary that the virtual functions be private
+- Alternative 2: Strategy pattern via Function Pointers
+- pass a pointer to function to class constructor
+- implementation of a Strategy design pattern
+- allows different instances of a class to have different calculation ways for the same thing
+- calculation functions can be changed at runtime
+- since not longer a member function - no access to class internals, only fix is to weaken encapsulation, e.g. declaring functions as friends or implementing public accessors
+- Alternative 3: Strategy patter via tf1::function (currently std::function)
+- std:function - general-purpose polymorphic function wrapper, may hold any callable entity whose signature is compatible with what is expected
+- instead of holding a pointer to a function like in alternative 2, now we hold a pointer to generalized pointer to a function = clients have more flexibility in specifying/passing functions
+- std::bind - partial function application (allows you to set some arguments to static values, e.g. `auto g = bind(f, _1, 4, _2) -> g(a, b) := f(a, 4, b)`)
+- Alternative 4: "Classic" strategy pattern: make calculation function a virtual member function of a separate calculation hierarchy
+- each object using a function contains a pointer to an object implementing specific version of that function
+- Advantage: recognizable as "standard" Strategy pattern, and offers tweak options to the function in question by adding another derived class to class hierarchy
+
+**TLDR:**
+- **- non-virtual interface idiom - wrap public non-virtual member function around less accessible virtual functions, example of the Template Method design pattern; use function pointer data members - stripped down manifestation of the Strategy pattern; use std::function data members - allowing use of any callable entitiy with a compatible signature; replace virtual functions in one hierarchy with virtual functions in another hierarchy - conventional Strategy pattern**
+- **Disadvantage of moving functionality from a member function to a function outside the class is lack of access to the class's non-public members**
+- **std::function object act like generalized function pointers - support all callable entities compatible with a given target signature**
+
+## Item 36: Never redefine an inherited non-virtual function
+
+- non virtual functions are statically bound - if a pointer is of type parent, non-virtual functions invoked through that pointer will always be those defined for parent class, even if the pointer points to an object of child class
+- virtual functions are dynamicaly bound - don't suffer from the problem above
+- if you redefine a non-virtual function that you inhering from parent class, child class object will likely exhibit inconsistent behavior - would depend on which pointer is used to point to the object (child or parent type)
+
+**TLDR: Never redefine an inherited non-virtual function.**
+
+## Item 37: Never redefine a function's inherited default parameter value
+
+- virtual functions are dynamically bound, but default parameter values are statically bound
+- static binding = early binding, dynamic binding = late binding
+- static type = type you declare in the program text, dynamic type - determined by the type of the object to which it currently refers
+- dynamic types can change as the program runs, typically through assignments
+- virtual functions are dynamically bound = the particular function called is determined by the dynamic type of the object through which it's invoked
+- bacasue default parameters are statically bound, you may end up invoking a virtual fucntion defined in derived class but using a default parameter value from base class
+- reason for allowing this - statically bound parameter values = higher runtime efficiency
+- when you're having trouble making virtual function behave as you want, consider alternatives (e.g. from item 35)
+
+**TLDR: Never redefine am inherited default parameter value, since those are statically bound, while virtual functions are dynamically bound**
+
+## Item 38: Model "has-a" or "is-implemented-in-terms-of" through composition
+
+- composition - relationship between types that arises when objects of one type contain objects of another type
+- composition synonyms - layering, containment, aggregation, embedding
+- composition = "has-a" or "in-implemented-in-terms-of" - depends on if it's application domain (people, vehicles, etc.) or implementation domain (buffers, mutexes, search trees, etc.)
+- when composition in application domain - has-a, when in implementation domain - is-implemented-in-terms-of
+- is-a = public inheritance, has-a/is-implemented-in-temrs-of = contain objects in class body
+
+**TLDR**
+- **Composition has meanings completely different for that of public inheritance**
+- **In the application domain, composition means has-a. In the implementation domain, it means is-implemented-in-terms-of**
