@@ -602,3 +602,59 @@ Consider:
 **TLDR**
 - **Composition has meanings completely different for that of public inheritance**
 - **In the application domain, composition means has-a. In the implementation domain, it means is-implemented-in-terms-of**
+
+## Item 39: Use private inheritance judiciously
+
+- for private inheritance, compiler will generally NOT convert a derived class object  into a base class object. Also, members inherited from a private base class become private members of the derived class, even if protected or public in the base class
+- private inheritance = is-implemented-in-terms-of
+- private inheritance = implementation ONLY should be inherited, interface should be ignored
+- use composition whenever you can, and use private inheritance whenever you must
+- when must you? Primarily when protected members and/or virtual functions enter the picture (sometimes also space concers)
+- instead of using private inheritance you could still use composition - declare a private nested class inside you class that inherits publicly from the class you need, e.g.:
+
+```c++
+class Widget {
+  private:
+    class WidgetTimer: public Timer {
+      public:
+        virtual void onTick() const;
+        ...
+    };
+
+    WidgetTImer timer;
+    ...
+}
+```
+- this design more complicated that just using private inheritance
+- Empty base optimization - with private inheritance of an empty class, size of the new object does not increase
+- EBO usually vialble only under single inheritance
+- Empty classes - no non-static data members, but can contain typedefs, enums, static data members, or non-virtual functions.
+- most classes aren't empty so EBO is rarely a justification for private inheritance
+- composition easier to understand - use it whenever possible
+- private inheritance - most likely legitimate design strategy when dealing with two classeds not related by is-a, where on needs to access protected members of another, or needs to redefine on or more of its virtual functions
+
+**TLDR:**
+- **Private inheritance means is-implemented-in-terms-of. Usually inferior to composition, but makes sens when derived class needs access to protected base class members or needs to redefine inherited virtual functions**
+- **Unlike composition, private inheritance can enable empty base optimization - can be important for minimizing objects size**
+
+## Item 40: Use multiple inheritance judiciously
+
+- multiple inheritance makes it possible to inherit the same name from more than one base class -> leads to ambiguity
+- C++ first identifies the function that's best match, only than checks for accesibility
+- you must resolve ambiguity via "className::"
+- "deadly MI diamond" - class inherits from two classes, which both inherit from some class - by default C++ will perform the replication
+- if you don't want data replication you need to perform virtual inheritance - make the base class virtual at the inheritance step (`class Child: virtual public Parent {...}`)
+- objects created via virtual inheritance are generally larger than normal inheritance because of some behind-the-scenes work dont by the compilers. Access to data members also slower
+- another point - rules governing initialization of virtual base classes are more complicated and less intuitive than for non-virtual ones
+- advice - don't use virtual base classes unless you absolutely need to; if you must use virtual base clases, try to avoid putting data in them
+- composition generally preferred, but inheritance necessary if virtual fucntions are to be redefined
+- idea: combine public inheritance of an interface with private inheritance of implementation
+- if SI design more or less equivalent to MI design, SI preferable. And there is almost always a way to make SI work
+
+**TLDR:**
+- **Multiple inheritance more complex than single inheritance - can lead to new ambiguity issues and to the need for virtual inheritance**
+- **Virtual inheritance imposes costs in size, speed, and complexity of initialization and assignment - most practical when virtual base classes have no data**
+- **Multiple inheritance does have legitimate uses. One scenario involves combining public inheritance from an Interface class with private inheritance from a class that helps with implementation**
+
+****
+
