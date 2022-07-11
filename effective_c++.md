@@ -658,3 +658,188 @@ class Widget {
 
 ****
 
+ ## Templates and Generic Programming
+
+ ### Item 41: Understanding implicit interfaces and compile-time polymorphism
+
+ - object-oriented programing - explicit interfaces adn runtime polymorphism
+ - explicit interface - one explicitly visible in the source code
+ - runtime polymorphism - specific function to call determined at runtime based on dynamic type
+ - in the templates "world" implicit interfaces and compile-time polymorphism more important
+ - implicit interface - set of expressions that must be valid for type T in order for the template to compile
+ - compile-time polymorphism  - when calls to functions involving an object involve instantioating templates to make the calls succeed (instantiating function template with different template parameters leads to different functions being called)
+ - explicit interface - based on signatures, implicit interface - based on valid expressions
+ 
+ **TLDR:**
+ - **Both classes and templates support interfaces and polymorphism**
+ - **For classes, interfaces are explicit and centered on function signatures. Polymorphism occurs at runtime through virtual functions**
+ - **For template parameters, interfaces are implicit and based on valid expressions. Polymorphism occurs during compilation through template instantiation and function overloading resolution**
+
+ ### Item 42: Understand the two meaning of typename
+
+ - class and typename - no difference
+
+ ```c++
+ template<class T> class Widget;
+ template<typename T> class Widget;
+ ```
+ - not always equivalent, though - sometimes you must use typename
+ - names in a template dependent on a template parameter are called dependent names (as opposed to non-dependent names)
+ - nested dependent name = dependent name nested inside a class
+ - if a parser encounters a nested dependent name in a template, it assumes that the name is NOT a type unless you tell it otherwise - nested dependent names are not types by default
+ - anytime you refer to a nest4ed dependent type name in a template, you must precede it by the word `typename`
+
+ ```c++
+ template<typename C>
+ void func(const C& container)
+ {
+   typename C::const_iterator iter(container.begin());
+ }
+ ```
+ - typename should be used for nested dependent types only
+ - exception to the "typename must precede nested dependent type" - a list of base classes or as a base class identifier in a member initialization list
+ - enforcing of those rules vary from compiler to compiler
+
+ **TLDR:**
+ - **When declaring template parameters, class and typename are interchangeable**
+ - **Use typename to identify nested dependent type names, except in a base class lists or as a base class identified in a member initialization list**
+
+ ### Item 43: Know how to access names in templatized base classes
+
+ - wrapping around a inherited function = good design since prevents hiding inherited names and doesn't redefine an inherited non-virtual function
+ - with templating, when compiler encounters a definition for a class template, they don't know what class it inherits from (if base class is a templated class)
+ - `template<>` syntax at the beginning of the class definition - signifies that it's neither a template nor a standalone class, rather a specialized version of a templated class to be used with specific type (total template specialization)
+ - specialized templates may not offer offer the same interface as general templates
+ - compilers refuse to look in templatized base classes for inherited names (in a sense, for template c++ inheritance stops working)
+ - three ways to fix it: preface calss to base class with `this->`; emply `using` declaration (`using BaseClass<typename_name>::func;`); explicitly specify that function called is in the base class (`BaseClass<typename_name>::func(...);`)
+ - third one least desired - of the function called is virtual, explicit qualification turns off the virtaul binding
+ - all of the three ways basically promise the compiler that any subsequent specializations of the base class template will support the interface offered by the general template
+- compiler can diagnose invaliud references to base class members sooner (when derived class template definitions are parsed) or later (when those templates are instantiated with specific template arguments). C++ prefers early diagnoses
+
+**TLDR: In derived class templates, refer to names in base class templates via `this->` prefix, via `using` declarations, or via an explicit base class qualification.**
+
+### Item 44: Factor parameter-independent code out of templates
+
+- member functions of class templates are implicitly instantiated only when used
+- using templates can lead to code bloat: binaries with replicated (or almost replicated) code, data, or both
+- the result can be: source code - nice, object code - bleh
+- primary tool - commonality and variability analysis
+- in non-template code replication explicit - you can see that there's duplication between two functions or classes
+- in template source code, replication implicit - only one copy of the template source code, so you have to train yourself to sense the replication that could take place when template instantiated multiple times
+- type parameters can lead to code bloat too, e.g. vector<int> amd vector<long>
+
+**TLDR**
+- **Templates generate multiple classes and multiple functions, so any template code not dependent on a template parameter causes bloat**
+- **Bloat due to non-type template parameters can often be eliminated by replacing template parameters with function parameters or class data members**
+- **Bloat due to type parameters can be reduced by sharing implementations for instantiation types with identical binary representations**
+
+### Item 45: Use member function templates to accept "all compatible types"
+
+- raw pointers support implicit conversions well - derived class pointers implicitly convert into base class pointers, pointer to non-const objects convert into pointer to const, etc.
+- emulationg such conversions in user-defined smart pointer classes is tricky - needs explicit conversion
+- for some cases you need a member function template (or member template) that generate a member functions of a class, e.g.
+```c++
+template<typename T>
+class SmartPtr
+{
+  public:
+    template<typename U>
+    SmartPtr(const SmartPtr<U>& other);
+}
+```
+- the above means - for every type T and every type U, a SmartPtr<T> can be craeted from a SmartPtr<U>. Knows as "generalized copy constructor"
+- not explicit for a reason - type conversions among build-in pointer types are implicit and require no cast, so it's reasonable for a smart pointer to emulate that
+- member function templates not limited to constructors - another role is support for assignment
+- declaring a generalized copy constructor (a member template) in a class doesn't keep compilers from generating their own copy constructor (a non template)
+
+**TLDR:**
+- **Use member function templates to generate functions that accept all compatible types**
+- **If you declare member templates for generalized copy construction or generalized assignment, you will still need to declate the normal copy constructor and coppy assignment operator**
+
+### Item 46: Define non-member functions inside templates when type conversions are desired
+
+- only non-member functions eligible for implicit type conversions on all arguments
+- implicit type conversion functions are never considered during template argument deduction (only during function calls)
+- inside class template the name of the template can be used as shorthand for the template and its parameters (inside `ClassName<T>` we can just write `ClassName` instead of `ClassName<T>`)
+- solution - declare as friend class inside the class - compilers can use implicit conversion functions when calling a declared function (as opposed to function template). This needs linking fixed, though
+- simplest thing to do - merge the body of the function into its declaration
+- in this context use of friendship has nothing to do with a need to access non-public parts - we need a non-member function  to make type conversions possible on all arguments, we declare the function inside the class to have the proper function automatically instantiated - the only way to declare a non-member function inside a class = make it a friend
+- many compilers force to put all template definitions in header files
+
+**TLDR: When writing a class template that offers functions related to the template that support implicit type conversions on all parameters, define those functions as friends inside the class template.**
+
+### Item 47: Use traits classes for information about types.
+
+- STL contains a few utility templates - one of them is called advance
+- advance: moves a specified iterator a specified distance
+
+```c++
+template<typename IterT, typename DistT>
+void advance(IterT& iter, DistT d);
+```
+- advance conceptually does just `iter += d` but cant be implemented that way - only random access iterators support the += operation
+- five categories of iterators
+- "Input iterator" - only forward, one step at a time, only read what they point to, can read what they point to only once
+- "Output iterators" - analogous but for the oujtput, instead of reading, it's writing.
+- both are least powerful iterators, suitable only for one-pass algorithms
+- "forward iterators" - everything input/output iterators plus they can read/write more than once - viable for multipass algorithms
+- "bidirectional iterators" add to forward iterators the ability to move backwards as well as forward. Example: set, map, multiset, multimap
+- most powerful category - random access iterators - add to bidirectional the ability to perform "iterator arithmetic", i.e. just forward and backward an arbitrary distance in constant time (analogous to opointer arithmetic). Example: iterators for vector, deque or string
+- for each of the iterators, c++ has a "tag struct" in the STL to identify it
+- traits: allow you to get information about a type during compilation
+- traits aren't a keyword or predefined construct in C++ - they are a technique and a convention
+- One of the demands - needs to work as well for built-in types as it does for user-defined types
+- the traits information for atype must be external to the type
+- standard technique - put it into a template and one or more specializations of the template, e.g. for iterators:
+
+```C++
+template<typename IterT>
+struct iterator_traits;
+```
+
+- by convention, traits always implemented as structs - those structs are called "traits classes"
+- the way iterator_traits works is that for each typoe IterT, a typedef names iterator_category is declared in the sctruct iterator_traits<IterT> - this typedef identifies the iterator category of IterT
+- to handle iterators that are pointers, a partial template specialization is used
+- Sum up: to design and implement a traits class - a) identify information about types you'd like to make available, b) choose a name to identify that information (e.g., iterator_category), c) provide a template and set of specializations (e.g. iterator_traits) that contain the information for the types you want to support
+- overloading a function - different parameter types for different overloads. When you call the function, compiler picks the best overload based on the passed arguments
+- using trat class: a) create a set of overloaded "worker" functions or function templates that differ in a traits parameter, b) implem,ent each function in accord with the traits information passed, c) create a "master" function or function template that calls the worksers, apssing information provided by a trats class
+- traits widely used in the standard library, e.g. iterator_traits, char_traits (information about character types), numeric_limits (information about numeric types, e.g. min and max values)
+
+**TLDR:**
+- **Trait classes make information about types available during compilation. They're implemented using templates and template specializations**
+- **In conjunction with overloading, traits classes make it possible to perform compile-timne if..else tests on types**
+
+### Item 48: Be aware of template metaprogramming
+
+- template metaprogramming (TMP) - process of writing template-based C++ programs that execute during compilation
+- when a TMP program finished, its output - pieces of C++ source code instantiated from templates - is then compiled as usual
+- TMP has two great strenghts - 1) makes some things easy that otherwise would be hard or impossible, 2) template metaprograms can shift work from runtime to compile-time
+- downside - compilation takes longer
+- typeid-based approach less efficient than using traits - type testing at runtime and code doing runtime type testing must be in the executable
+- fun fact - TMP is Turing-complete (using TMP you can declare variables, perform loops, write and call functions, etc. - looks differnt than regular C++ though)
+- example library for TMP - Boost's MPL
+- loops in TMP accomplished via recursion, precisely - recursive template instantiations
+- TMP equivalent of "hello world" - factoria computation via recursive template instantiation
+
+```C++
+template<unsigned n>
+struct Factorial {
+  enum {value = n * Factorial<n - 1>::value};
+};
+
+template<>
+struct Factorial<0> {
+  enum {value = 1};
+}
+```
+
+- what TMP can accomplish: a) ensuring demensional unit correctness, b) optimizing matrix operations (expression templates), c) generating custom design pattern implementations (policy-based design, basis for generative programming)
+- TMP not for everyone - syntax unintuitive and tool support limited
+
+**TLDR:**
+- **Template metaprogramming can shift work from runtime to compile-timne, thus enabling earlier error detection and higher runtime performance**
+- **TMP can be used to generate custom code based on combinations of policy choices, and it can also be used to avoid generationg code inappropriate for particular types**
+
+****
+
+## Customizing new and delete
