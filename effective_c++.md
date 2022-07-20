@@ -747,7 +747,7 @@ class SmartPtr
     SmartPtr(const SmartPtr<U>& other);
 }
 ```
-- the above means - for every type T and every type U, a SmartPtr<T> can be craeted from a SmartPtr<U>. Knows as "generalized copy constructor"
+- the above means - for every type T and every type U, a `SmartPtr<T>` can be craeted from a `SmartPtr<U>`. Knows as "generalized copy constructor"
 - not explicit for a reason - type conversions among build-in pointer types are implicit and require no cast, so it's reasonable for a smart pointer to emulate that
 - member function templates not limited to constructors - another role is support for assignment
 - declaring a generalized copy constructor (a member template) in a class doesn't keep compilers from generating their own copy constructor (a non template)
@@ -843,3 +843,91 @@ struct Factorial<0> {
 ****
 
 ## Customizing new and delete
+
+### Item 49: Understand the behavior of the new-handler
+
+- when `new` cant satisfy memory request, it throws an exception
+- before throwing an exception, it calls (kinda) a new-handler - a client-specifiable error-handling function
+- set_new_handler - sets the function new should call if it can't allocate the requested memory
+
+```C++
+void myFunction()
+{
+  ...
+}
+
+int main()
+{
+ std::set_new_handler(myFunction);
+ ...
+}
+
+```
+- when `new` unable to fulfill a memory request, it calls the new-handler function repeatedly until it can find enough memory
+- a well-designed new-handler function must do on of the following: a) make more memory available, b) install a different new-handler, c) deinstall the new-handler, d) throw an exception, e) not return
+- you can have each class provide its own versions of set_new_handler and operator new to handle memory differently for different classes
+- "mixin-style" class - a base class that's designed to allow derived classes to inherit a single specific capability, e.g. the ability to set a class-specific new-handler
+- curiously recurring template pattern (CRTP) - A class inheriting from a templatized base class that takes that class as a type parameter
+- there is a no-throw version of new (new (std::nothrow) ClassName) but it's rarely needed
+
+**TLDR:**
+- **set_new_handler allows you to specify a function to be called when memory allocation requests cannot be satisfied.**
+- **Nothrow new is of limited utility, because it applies only to memory allocation - associated constructor calls may still throw**
+
+### Item 50: Understand when it makes sense to replace new and delete
+
+- reason to replace 1: to detect usage errors
+- underrun - writing prior to the beginning of an allocated block, overrun - writing beyond the end of an allocated block
+- reason to replace 2: to improve efficiency: compiler-provided implementation are general-purpuse - not ideal for all use-cases, custom can improve speed (sometimes orders of magnitude) and memory requirement (up to 50% less)
+- reason to replace 3: to collect user statistics
+- many compuater architectures require that data of particular types be place in memory at particular kinds of addresses (or have better performance if this is satisfied), e.g. it's fastest to access doubles on the x86 architecture when ther are eight-byte aligned
+- in most cases, you don't need to write your own new or delete - modern compilers can help with additional features
+- Boost contains an example of a custom memory allocator - Pool - for large number of small objects
+
+**TLDR - when to replace new and delete:**
+- **to detect usage errors**
+- **to collect statistics about the use of dynamically allocated memory**
+- **to increase the speef of allocation and deallocation**
+- **to reduce the space overhead of default memory management**
+- **to compensate for suboptimal alignment in the default allocator**
+- **to cluster related objects near one another**
+- **to obtain unconventional behavior**
+
+### Item 51: Adhere to convention when writing new and delete
+
+- new implementation requires: right return value, calling the new-handling function when insufficient memory, and being prepared to cope with requests for no memory
+- if you can supply memory, return pointer to it. If not, throw `bad_alloc`
+- new-handling function called multiple times, after each failure (to e.g. try to free up some memory), only when pointer to new-handling function is unll does operator new throw
+- C++ requires the operator new to return a legit pointer even when zero bytes are requested
+- operator new contains an infinite loop - only way out is to provide memory or throw
+- in C++ all freestanding objects have non-zero size
+- delete implementation requires - you need to honor the C++'s guarantee that "it's always safe to delete the null pointer"
+
+**TLDR:**
+- **operator new should contain an infinite loop trying to allocate memory, should call the new-handler if it can't satisfy a memory request, and should handle requests for zero bytes. Class-specific versions should handle requests for larger blocks than expected**
+- **operator delete should do nothing if passed a pointer that is null. Class-specific versions should handle blocks that are larger than expected**
+
+### Item 52: Write placement delete if you write placement new
+
+- with
+```C++
+Widget *pw = new Widget;
+```
+two function calls: operator new and default constructor
+- if new succeeds but constructor fails, allocation needs to be undone, otherwise memory leak - responsibility for undoing on the C++ runtime system
+- runtime system does that by calling delete, but must know which one
+- no issue with normal signatures, problem when you declare non-normal new forms - ones that take additional parameters
+- if operator new takes extra parameters (other than mandatory size_t), it's then known as a placement version of new
+- particularily useful one - takes a pointer specifying where an object should be constructed (part of standard library, used e.g. by vector)
+- if placement new - runtime system doesn't know how to undo it, doesn't know how the called version of new works - looks for a version of delete tkat takes the same number and tyypes of extra arguments, if doesnt find it - does nothing!
+- delete with extra args = placement delete
+- applying delete to a pointer never yields a call to a placement version of delete - so you must provide both versions of delete (placement and normal)
+- because member functions hide functions with the same names in outer scopes, you need to be careful to avoid having class-specific news hide other news
+
+**TLDR:**
+- **When you write a placement version of new, be sure to write the corresponding placement version of delete. If you don't , your program may experience subtle, intermittent memory leaks**
+- **When you declare placement versions of new and delete, be sure not to unintentionally hide the normal versions of those functions**
+
+****
+
+## Miscellany
