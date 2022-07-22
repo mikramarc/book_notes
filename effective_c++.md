@@ -931,3 +931,70 @@ two function calls: operator new and default constructor
 ****
 
 ## Miscellany
+
+### Item 53: Pay attention to compiler warnings
+
+- sometimes different compiler messages seem to mean something different than what they actually mean - need to learn to understand
+- best practice to compile warning-free
+- if you really wanna ignore warning, make sure you understand exactly what it's saying
+
+**TLDR**
+- **Take compiler warning seriously, and strive to compile warning-free even at the maximum warning level**
+- **Don't become dependent on compiler warnings, because different compilers warn about different things - porting to a new compiler may eliminate some warning messages**
+
+### Item 54: Familiarize yourself with the standard library (including TR1)
+
+- most new C++11 features in the form of STD additions
+- major parts of STD by C++98:
+  - Standard Template Library (STL) - containers, iterators, algorithms, function objects, various container and function object adapters
+  - Iostreams - user-defined buffering, internalized IO, cin/cout/cerr/clog
+  - Support for internationalization - including the abiity to have multiple active locales, types like wchar_t and wstring facilitate working with Unicode
+  - Support for numeric processing - including templates for complex numbers and arrays of pure values
+  - an exception hierarchy - including the base class `exception`, its derived classes `logic_error` and `runtime_error`, and various classes that inherit from those
+  - C89's standard library - everything in the 1989 C standard library is also in C++
+- should be familiar with all the above
+- TR1 specifies 14 new components (all in std namespace):
+  - smart pointers
+  - std::function - possible to represent any callable entity whose signature is consistent with a target signature
+  - std::bind
+  - Hash tables - used to implement sets, multisets, maps, and multimaps (the unordered stuff)
+  - Regular expressions - including ability to do regular expresion-based search and replace operations on strings, etc.
+  - Tuples - nifty generalization of the pair template, can hold an arbitrary number
+  - std::array
+  - std::mem_fn - syntactically uniform way of adapting member function pointers (wrapper objects for pointers to members)
+  - std::reference_wrapper - facility to make reference act a bit more like objects - among other things, this makes it possible to create containers that act as if they hold references
+  - Random number generation - superior to rand
+  - Mathematical special functions - including Laguerre polynomials, Bessel functions, complete elliptic integrals, and many more
+  - C99 compatibility extensions - collection of functions and templates designed to bring many new C00 library features to C++
+  - Type traits (TMP) - set of traits classes top provide compile-time information about tyoes
+  - std::result_of (TMP) - a template to deduce the return types of function calls
+- legacy code written with pre-TR1 constructs continues to be valid
+
+**TLDR**
+- **the primary standard C++ library functionality consists of the STL, iostream, and locales. The C89 standard library is also inlcuded**
+- **TR1 adds support for smart pointers, generalized function pointers, hash-based containers, regular expressions, and 10 other components**
+
+### Item 55: Familiarize yourself with boost
+
+- Boost = collection of high-quality, open source, platform- and compiler-independent library
+- both a community and libraries
+- boost close relationship with C++ committee
+- testing ground for capabilities that could be added to Standard C++
+- process for accepting libraries based on public peer review
+- exemples of libraries: Coversion (numeric_cast, lexical_cast), Boost Graph Library, Boost MPL library (metaprogramming)
+- General categories of boost (not exhaustive):
+  - String and text processing
+  - Containers
+  - Function objects and higher-order programming
+  - Generic programming
+  - Template metaprogramming
+  - Math and numerics
+  - Correctness and testing
+  - Data structures
+  - Inter-language support
+  - Memory
+  - Miscellaneous
+
+**TLDR:**
+- **Boost is a community and web site for the development of free, open source, peer-reviewed C++ libraries. Boost plays an influential role in C++ standarization**
+- **Boost offers implementations of many TR1 components, but it also offers many other libraries**
