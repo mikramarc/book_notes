@@ -1,5 +1,7 @@
 # Effective C++
 
+****
+
 ## Accustoming yourself to C++
 
 ### Item 1: View C++ as a federation of languages

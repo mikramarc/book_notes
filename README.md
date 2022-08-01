@@ -1,2 +1,2 @@
 # book_notes
-Notes from coding books
+Notes from coding/robotics books
