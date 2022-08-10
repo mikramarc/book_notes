@@ -132,4 +132,66 @@ func_for_rx(27)
 
 ****
 
+ ## auto
+
+ ### Item 5: Prefer auto to explicit type declarations
+
+ - auto variables have their type deduced from their initializer, so they must be initialized - most of the uninitialized variable problems go away
+ - using auto allows us to omit using long, obscure type names, like dereferencing an iterator
+ - auto allows us to represent types known only to compilers due to the use of type deduction (context: lambda closures)
+ - in C++14 parameters to lambda expressions may involve auto
+ - std::function - can refer to any callable object, i.e., to anything that can be invoked like a function
+ - you could wrap lambda closure with std::function to prevent using auto, but it could end up taking more memory if initially allocated memory is not enough for storing the closur; also, using std::function almost certain to be slower than using with auto (due to restricted inlining and indirect function calls); can yield out-of-memory exceptions too
+ - auto allows to prevent unknown/unintentinal implicit casting
+ - problem with auto - decreases readability of the code
+- if you think code is clearer or more maintainable with explicit type declarations, use them
+- type inference - ability to automatically deduce, either partially or fully, the type of an expression at compile time
+- using auto makes it less effort to change code if one of the types change - no need to propagate the change in all places of explicing type declaration
+
+**TLDR:**
+- **auto variables must be initialized, are generally immune to type mismatches that can lead to portability or efficiency problems, can ease the process of refactoring, and typically require less typing than variables with explicitly specified types**
+- **auto-typed variables are subject to the pitfalls described in Items 2 and 6**
+
+### Item 6: Use the explicitly typed initialized idiom when auto deduces undesired types
+
+- sometimes using auto as opposed to explicit typing can lead to undefined behaviour
+- e.g., operator [] for std::vector<bool> won't return a reference to an element of the container (only a case for bool) - instead, it returns an object of type std::vector<bool>::reference
+- C++ forbids reference to bits
+- when using explicit typing, std::vector<bool>::reference would be implicitly converted to bool
+- std::vector<bool>::reference - an example of a proxy class: a class that exists for the purpose of emulating and augmenting the behavior of some other type
+- purpose of the above is to emulate returning a reference to a bit
+- STD's smart pointers - proxy classes that graft resource management onto raw pointers
+- "Proxy" is also a design pattern
+- some proxy classes more hidden (e.g. std::bitset) than others (e.g. std::shared_ptr)
+- as a general rule, "invisible" proxy classes don't play well with auto - usually not designed to live longer than a single statement
+- rule of thumb - avoid code of this form:
+```C++
+auto someVar = expression of "invisible" proxy class type;
+```
+- how to find "invisible" proxy classes - use library documentation and header files, e.g.:
+```C++
+template <class Allocator>
+class vector<bool, Allocator> {
+  public:
+  ...
+  class reference { ... };
+
+  reference operator[](size_type n);
+  ...
+}
+```
+- explicitly typed initializer idiom = declaring a variable with auto, but casting the initialization expression to the type you want auto to deduce, e.g.:
+```C++
+std::vector<bool> features(const Widget& w);
+
+...
+
+auto highPriority = static_cast<bool>(features(w)[5]);
+```
+
+**TLDR:**
+- **"Invisible" proxy types can cause auto to deduce the "wrong" type for an initializing expression**
+- **The explicitly typed initializer idiom forces auto to deduce the type you want it to have**
+
+****
 
