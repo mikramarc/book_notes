@@ -195,3 +195,292 @@ auto highPriority = static_cast<bool>(features(w)[5]);
 
 ****
 
+## Modern C++
+
+### Item 7: Distinguisz between () and {} when creating objects
+
+- initialization values may be specified with parantheses, an equals sign, or braces; in many cases also possible to use an equals sign and braces together
+- when using equals sign, it's important to distinguish between initialization and assignment
+- C++11 introduced uniform initialization - based on braces
+- novel feature of braced initialization - prohibits implicit narrowing conversions among built-in types, e.g.
+```C++
+double x, y, z;
+
+...
+
+int sum{x + y + z};  // error!
+```
+- braced initialization also immune to C++'s "most vexing parse" (anything that can be parsed as a declaration must be interpreted as one)
+```C++
+Widget w1()  //  most vexing parse! declares a function
+             // names w1 that returns a Widget!
+Widgetw2{};  // calls Widget constructor with no args
+```
+- braced initialization can behave surprisingly in contexts of std::initializer_lists and constrcutor overload resolution
+- when auto-declared variable has a braced initializer, the type deduced is std::initializer_list
+- if you use an empty set of braces to construct an object, you get default construction (not empty std::initializer_list)
+- if your set of overloaded constructors includes one or more functions taking a std::initializer_list, client code using braced initialization may see only the std::initializer overloads - best to design constructors so thast the overload called isn't affected by whether clients use parentheses of braces
+- implication - if you have a class with no std::initializer_list constructore and you add one, client code using braced initialization may find that calls that used to resolve to non-std::initializer_list constructors now resolve to the new function
+- as class client, choose carefully between parentheses and braces when creating objects
+- for templates, the confusion between braces and parentheses goes deeper - no clear rule when to use on or another
+
+**TLDR:**
+- **Braced initialization is the most widely usable initialization syntax, it prevents narrowing conversions, and it's immune to C++'s most vexing parse**
+- **During constructor overload resolution, braced initializers are matched to std::initializer_list parameters if at all possible, even if other constructors offer seemingly better matches**
+- **An example of where the choice between parentheses and braces can make a significant difference is creating a std::vector\<numeric type\> with two arguments**
+- **Choosing between parentheses and braces for object creation inside templates can be challenging**
+
+### Item 8: Prefer nullptr to 0 and NULL
+
+- 0 is an int, not a pointer, even though  in a conctext where only a pointer can be used, it will be interpreted as null pointer
+- same goes for NULL, though it's a bit more fuzzy (implementations are allowed to give e.g. long)
+- implication - overloading on pointer and integral types could lead to unexpected behaviors
+- C++98 guidelint - avoid overloading on pointer and integral types
+- nullptr better since it doesn't have an integral type (implicitly converts to all raw pointer types)
+- therefore nullpointer avoids overload resolution surprises
+- nullptr can improve code clarity when auto is involved
+- trying to pass an int as a shared_ptr is a type error
+- type deduced for 0 and NULL is int, while for nullptr it's std::nullptr_t
+
+**TLDR:**
+- **Prefer nullptr to 0 and NULL**
+- **Avoid overloading on integral and pointer types**
+
+### Item 9: Prefer alias declarations to typedefs
+
+- alias declarations may be teplatized (in which case they're called alias templates), while typedefs cannot
+- in C++98 it had to be hacked with typedefs + templatized structs
+- e.g.:
+```C++
+template<typename T>
+using MyAllocList = std::list<T, MyAlloc<T>>;
+```
+- if a type is dependent on a template type parameter, it's a "dependent type" - must be preceded by `typename`
+```C++
+typename MyAllocList<T>::type list;
+```
+- if you want to create revised types from a templated types, you can use type traits - given a type T to which you'd like to apply transformation, the resulting type is std::transformation<T>::type, e.g. `std::remove_const<T>::type`
+- if you apply those to a type parameter inside a template, you'd also have to precede each use with `typename` (in C++11 type traits are implemented as nested typedefs inside templatized structs, but all added as alias templates in C++14)
+
+**TLDR:**
+- **typedefs don't support templatization, but alias declarations do**
+- **Alias templates avoid the `::type` suffix and, in templates, the "typename" prefix often required to refer to typedefs**
+- **C++14 offers alias templates for all the C++11 type traits transformations**
+
+### Item 10: Prefer scoped enums to unscoped enums
+
+- enumerators in C++98-style enums have the same scope as the the enum itself - nothing in that scope have the same name
+```C++
+enum Color {black, white, red};
+auto white = false;  // error! white already declared in this scope
+```
+- gives name to this kind of enum - unscoped
+- new C++11 (scoped) enums don't leak into the scope containing their enum
+```C++
+enum class Color {black, white, red};
+auto white = false;  // fine
+```
+- scoped (class) enums are much more strongly typed than unscoped enums
+- enumerators for unscoped enums implicitly convert to integral types (and, form there, to floating-point types)
+- no implicit conversions from enumerators in a scoped enoum to any other type:
+```C++
+enum class Color {black, white};
+Color c = Color::black;
+if (c < 14.5) {  // error!
+    ...
+}
+```
+- possible to cast class enums to numbers via static_cast
+- another advantage of scoped enums - can be forward-declared, i.e., their names may be declared without specifying enumerators, without any additional work done
+- C++98 doesn't allow enum declarations (only definition) so that compiler can choose the most optimal underlying type
+- scoped enums have default underlying type (int)
+- you can override underlying type for both enums if desired:
+```C++
+enum class Status: std::uint32_t
+enum Color: std::uint8_t
+```
+- after you define unscoped enum's type, you can forward declare it
+- one situation when unscoped enums can be useful - when refering to fields within C++11's std::tuples - you can pass enum to get<val> function instead of remembering the number - corresponding code when using scoped enums much more verbose (becasue of the static cast)
+
+**TLDR:**
+- **C++98-style enums are now known as unscoped enums**
+- **Enumerators of scoped enums are visible only within the enum. They convert to other types only with a cast**
+- **Both scoped and unscoped enums support specification of the underlying type. The default underlying type for scoped enums is int. Unscoped enums have no default underlying type**
+- **Scoped enums may always be forward-declared. Unscoped enums may be forward-declared only if their declaration specifies an underlying type**
+
+### Item 11: Prefer deleted functions to private undefined ones
+
+- in C++98, if you want to suppress use of a member function, it's almost always the copy constructor, the assignment operator, or both
+- The C++98 approach to preventing use of these functions is to declare them private and not define them
+- declaring functions private prevents clients from calling them, deliberately failing to define them means thgat if code that still has access to them (e.g. friends of the class) uses them, linking will fail due to missing function definitions
+- in C++ there's a better way of achieving that by using `= delete`
+- deleted functions may not be used in any way, so even the code that's in member and friend functions will fail to compile (before the link-time)
+- by convention, deleted functions are declared public, not private - C++ checks accessibility bnefore deleted status, might lead to misleading compiler errors
+- any function can be deleted, while only member functions may be private
+```C++
+bool isLucky(int number);
+bool isLucky(char) = delete;
+
+if (isLucky('a')) ...  // prevented
+```
+- another thing that deleted function can perform, while private can't, is to prevent use of template instantiations that should be disabled
+```C++
+template<typename T>
+void processPointer(T* ptr);
+...
+template<>
+void processPointer<char>(char*) = delete;
+```
+- template specializations must be written at namespace scope, not class scope
+
+**TLDR:**
+- **Prefer deleted functions to private undefined ones**
+- **Any function may be deleted, including non-member functions and template instantiations**
+
+### Item 12: Declare overriding functions override
+
+- for overriding to occure, several requirements must be met:
+    - the base class function must be virtual
+    - the base and derived function names must be identical (except in the case of destructors)
+    - the parameter types of the base and derived functions must be identical
+    - the constness of the base and derived functions must be identical
+    - the return types and exception specifications of the base and derived functions must be compatible
+    - the functions' reference qualifiers must be identical (C++11)
+- reference qualifiers make it possible to limit use of member function to lvalues or rvalues only
+```C++
+class Widget {
+    public:
+    ...
+    void doStuff() &;
+    void doStuff() &&;
+};
+...
+Widget w;
+w.doStuff();  // calls doStuff for lvalues
+makeWidget().doStuff();  // via factory function, calls doStuff for rvalues
+```
+- code containing overriding errors is typically valid, but its meaning isn't what you intended, so you can't rely on compilers notifying you if you do something wrong
+- C++ gives a way to make explicit that a derived class function is supposed to override a base class version - declare it `override`
+- C++11 introduced two contextual keywords - override and final
+- override has a reserved meaning only when at the end of a member function declaration (means legacy code won't be broken)
+
+**TLDR:**
+- **declare overriding functions `override`**
+- **member function reference qualifiers make it possible to treat lvalue and rvalue objects (*this) differently**
+
+### Item 13: Prefer const_interators to iterators
+
+- `const_iterator`s are the STL equivalent of pointers-to-const - they point to values that may not be modified
+- use `const_iterator` any time you need an iterator, yet have no need to modify what the iterator points to
+- `const_iterators` were too much trouble to use in C++98
+- use `cbegin` and `cend` for const iterators (even for non-const containers)
+- maximally generic library code takes into accoung that some containers and container-like data structures offer begin and end etc. as non-member functions, rather than member functions (e.g. built-in arrays)
+
+**TLDR:**
+- **prefer `const_iterator`s to `iterator`s**
+- **In maximally generic code, prefer non-member versions of begin, end, cbegin, etc., over their member function counterparts**
+
+### Item 14: Declare functions noexcept if they won't emit exceptions
+
+- in C++11 exception specifications mean - either a function might emit an exception or it's guaranteed that it wouldn't
+- C++98 exception specifications now deprecated
+- whether a function is noexcept is as important as whether a member function is const - failure to declare a function noexcept when you know that it won't emit exceptions is poor interface specification
+- noexcept also permits compilers to generate better object code
+- in C++11 exception specification, if violated, the stack is only POSSIBLY unwound before program execution is terminator - optimizers need not keep the runtime stack in an unwindable state if an exception would propagate out of the function, nor must they ensure that objects are destroyed in the inverse order of construction
+- you can have nested noexcepts - whether something is noexcept depends on whether the expression inside the noexcept clause is noexcept
+- most functions are exception-neutral - they throw no exceptions themselves, but functions they call might emit one - they are never noexcept; therefore most functions lack the noexcept designation
+- when you can honestly say that a function should never emit exceptions, you should definitely declare it noexcept
+- only use noexcept with functions that don't emit naturally - do not overengineer and contort a function just to allow it to have noexcept
+- in C++11, all memory deallocation functions and all destructors - both user-defined and compiler-generated - are implicitly noexcept (however you can declare a destructor `noexcept(false)`, though uncommon)
+- functions can be "wide contract" - no preconditions required, never exhibits undefined behavior, or "narrow contract" - if the precondition is violated, results are undefined
+- library designer who distinguish wide from narrow contracts generally reserve noexcept for functions with wide contracts
+- compilers typically offer no help in identifying inconsistencies between function implementations and their exception specifications
+- becasue there are legitimate reasons for noexcept funtions to rely on code lacking the noexcept guarantee (example, they're part of a C library), C++ permits such code, and compilers generally don't issue warnings about it
+
+**TLDR:**
+- **`noexcept` is part of a function's interface, and that means that callers may depend on it**
+- **`noexcept` functions are more optimizable than non-noexcept functions**
+- **`noexcept` is particularly valuable for the move operations, swap, memory deallocation functions, and destructors**
+- **most functions are exception-neutral rather than noexcept**
+
+### Item 15: Use constexpr whenever possible
+
+- `constexpr` indicates a value that's not only constant, but known during compilation
+- not always the case though, that constexpr functions are const, nor that their values are known during compilation (it's actually a feature)
+- technicaly constexpr values known during "translation", which consists not just of compilation but also of linking
+- values known during compilation may be placed in read-only memory
+- those values, when integral, can also be used in contexts that require "integral constant expression", e.g. specification of array size
+- const doesn't offer the same guarantee as constexpr, since const objects need not be initialized with values known during compilation
+- constexpr functions produce compile-time constants when they are called with compile-time constants - if they are called with values not known until runtime, they produce runtime values
+- what constexpr functions do:
+    - can be used in contexts that demand compile-time constants - if the values you pass are known during compilation, the result is too. If any of the arguments' values is not known during compilation, code will be rejected
+    - when a constexpr function is called with one or more values that are not known during compilation, it acrs like a normal function - no need for two functions, one for compile-time, one for runtime, can act like both
+- there are some restrictions on constexpr functions, more in C++11 than C++14
+- constexpr functions are limited to taking and returning literal types (types that can have values determined during compilation)
+- constructors and members can be constexpr as well - procudes user-defined literal types
+- constexpr objects and functions can be employed in a wider range of contexts than non-constexpr objects and functions
+- constexpr is part of an object's or function's interface
+
+**TlDR:**
+- **constexpr objects are const and are initialized with values known during compilation**
+- **constexpr functions can produce compile-time results when called with arguments whose values are known during compilation**
+- **constexpr objects and functions may be used in a wider range of contexts than non-constexpr objects and functions**
+- **constexpr is part of an object's or function's interface**
+
+### Item 16: Make const member functions thread safe
+
+- typical use of `mutable` - if conceptually class function doesn't change state of the object but we need to cache some data - make cached data mutable and the function const
+- it's not thread safe though - two threads can modify the cache data at the same time
+- easiest way to deal with this - employ a mutex; in this case would be declared mutable too
+- std::mutex can be neither copied or moved, so adding it to a class prevents objects of this class to be copied or moved
+- you can use std::atomic to cache number of calls for a function - also prevents copying and moving of an object
+- overuse of std::atomic (multiple atomic vars) can still lead to race conditions
+- for a single variable or memory location requiring synchronization, use of std::atomic is aqequate, but once you get to two or more variables or memory locations that require manipulation as a unit, you should use a mutex (e.g. std::mutex and std::lock_guard)
+- only viable if there is possibility of multi-process calls (but often the case there is)
+
+**TLDR:**
+- **Make const member functions thread safe unless you're CERTAIN they'll never be used in a concurrent context**
+- **Use of std::atomic variables may offer better performance than a mutex, but they're suited for manipulation of only a single variable or memory location**
+
+### Item 17: Understand special member function generation
+
+- special member functions - the ones that C++ is willing to generate on it's own
+- in C++98 there are four - default constructor, destructor, copy constructor, copy assignment operator - generated only if needed
+- in C++11 two new functions - move constructor and move assignment operator
+```C++
+class Widget {
+public:
+...
+Widget(Widget&& rhs);
+Widget& operator=(Widget&& rhs);
+};
+```
+- moves don't always occur - types that aren't movable will be "moved" via their copy operations
+- the heart of each memberwise "move" is application of std::move
+- copy operations are independent - declaring one deson't prevent compilers from generating the other
+- move operations are NOT independent - if you declare either, that prevents compilers from generating the other
+- move operations won't be generated for any class that explicitly declares a copy operation
+- works the other way around too - declaring a move operation in a class causes compilers to disable the copy operations
+- C++11 does NOT generate move operations for a class with a user-declared destructor
+- "Rule of three" - if you declare any of a copy constrcutor, copy assignment operator, or destructor, you should declare all three
+- move operations generated for classes (when needed) only if these three things are true:
+    - no copy operations are declared in the class
+    - no move operations are declared in the class
+    - no destructor is declared in the class
+- you can use `= default` to force generation of default copy operations
+- using `default` could be a good idea even if redundant, to make your intentions clear (and to avoid some fairly subtle bugs like unintentional copying)
+- general rules for autogenerations in C++11:
+    - default constructor: same as in C++98. Generated only if the class contains no user-declared constructors
+    - destructor: essentially same as C++98. Only difference - destructors are noexcept by default. Virtual only if a base class destructor is virtual
+    - copy constructor: Same runtime behavior as C++98 - memberwise copy construction of non-static data members. Generated only if the class lacks a user-declared copy constructor. Delated if the class declares a move operations. Generation in a clas with user-declared copy assignment operator or destructor is deprecated
+    - copy assignment operator: same runtime behavior as C++98 - memberwise copy assignment of non-static data members. Generated only if the class lacks a user-declared version. Deleted if the class declares a move operation. Generation in a class with user-declared copy constructor or destructor deprecated
+    - move constructor and move assignment operator: each performs memberwise moving of non-static data members. Generated only if the class lacks user-declared copy operations, move operations, and destructor.
+    - the rules don't apply for member function templates
+
+**TLDR:**
+- **the spacial member functions are those compilers may generate on their own: default constructor, destructor, copy operations, and move operations**
+- **move operations are generated only for classes lacking explicitly declared move operations, copy operations, and the destructor**
+- **the copy constructor is generated only for classes lacking an explicitly declared copy constructor, and it's deleted if a move operattion is declared. THe copy assignment operatior is generated only for classes lacking an explicitly declared version, and it's deleted if a move operation is declared. eneration of the copy operations in classes with an explicitly declared copy operation or destructor is deprecated**
+- **member function templates never suppress generation of special member functions**
+
+****
