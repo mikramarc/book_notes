@@ -484,3 +484,136 @@ Widget& operator=(Widget&& rhs);
 - **member function templates never suppress generation of special member functions**
 
 ****
+
+## Smart pointers
+
+### Item 18: Use `std::unique_ptr` for exclusive-ownership resource management
+
+- unique_ptrs are by default the same size as raw pointers, and for most operations (including dereferencing) they execute exactly the same instructions = you can use them in situations where memory and cycles are tight
+- unique_ptr embodies "exclusive ownership" semantics = non-null one always owns what it points to
+- moving a unique_ptr transfers ownership from the source pointer to the destination pointer (source is set to null); copying isn't allowed = move-only type
+- upon destruction, a non-null unique_ptr destroys its resource (by default, by applying delete to the raw pointer inside it)
+- common use for unique_ptr - a factory function return type for objects in a hierarchy
+- unique_ptr objects can have "custom deleters" - arbitrary functions/function objects to be invoked when it's time for their resource to be destroyed
+- custom deleter's type specified as the second type argument to unique_ptr template
+- C++11 forbides implicit converstion from raw pointer to a smart pointer
+- std::forward can be used for perfect-forwarding
+- with custom deleters, unique_ptr is possibly no longer the same size as raw pointer (unless stateless function object used, e.g. lambda with no captures)
+- lambdas prefarable to function for custom deleters
+- unique_ptrs also popular as a mechanism for implementing Pimpl Idiom
+- unique_ptr comes in two forms, one for individual objects, one for arrays. however the one for arrays vistually never used
+- unique_ptr easily and efficiently converts to shared_ptr
+
+**TLDR:**
+- **`std::unique_ptr` is a small, fast, move-only smart pointer for managing resources with exclusive-ownership semantics**
+- **By default, resource destruction takes place via delete, but custom deleters can be specified. Stateful deleters and function pointers as deleters increase the size of unique_ptr objects**
+- **Converting a unique_ptr to shared_ptr is easy and efficient**
+
+### Item 19: Use `std::shared_ptr` for shared-ownership resource management
+
+- an object accessed via std::shared_ptrs has its lifetime managed by those pointers through shared ownership
+- when the last std::shared_tr stops pointing to an object stops pointing there, that pointer destroys the object
+- std::shared_ptr knows is the last by consulting the resource's "reference count", a value associated with the resource that keeps track of how many shared_ptrs point to it
+- shared_ptr's constructor increments this count (usually) and destructor decrements it, copy assignment operator does both
+- existance of the reference count has performance implications
+    - shared_ptrs are twice the size of raw pointer (raw pointer to resource and raw pointer to reference count)
+    - memory for the reference count must be dynamically allocated
+    - increments and decrements of the reference count myst be atomic (there can be simultaneous readers and writers in different threads), and atomic operations are typically slower than non-atomic ones
+- move-constructing a shared_ptr from another shared_ptr sets the source shared_ptr to null = no reference count manipulation is required (moving shared_ptrs therefore faster than copying, and thats true for both assignment and construction)
+- custom deleters also supported for shared_ptr, the design of that support is different though - the type of deleter is not part of the type of the smart pointer in the case of shared_ptr
+- specifying a custom deleter doesn't change the size of a shared_ptr object (it may have to use additional memory but it won't be part of the pointer object)
+- reference count part of a larger data structure - "control block"
+- aside from the reference count, the control block contains other data, e.g. copy of custom deleter or custom allocator, and other stuff
+- rules for creation of control block:
+    - make_shared always creates a control block (since it manuyfactures a new object to point to)
+    - a control block is created when a shared_ptr is constructed from a unique-ownership pointer
+    - when a shared_ptr constructor is called with a raw pointer, it creates a control block
+- constructing more than one shared_ptr from a single raw pointer leads to undefined behavior - pointed-to object would have multiple control blocks (and as consequence multiple reference counts)
+- try to avoid passing raw pointers to shared_ptr constructor
+- if you must pass a raw pointer to a shared_ptr constructor, pass the result of new directly
+- loads of problems also with passing "this" pointer to a shared_ptr constructor
+- to avoid the "this" problem you can used `std::enable_shared_from_this` (a base class template)
+- with default deleter and allocator and creation with make_shared the control block is only about three words in size and it's allocation is essentially free, and derefencing shared_ptr is no more costly than a raw pointer
+- you can't create a unique_ptr from a shared_ptr (even if reference count is 1)
+- shared_ptr can't work with arrays
+
+**TLDR:**
+- **`std::shared_ptr`s offer convenience approaching that of garbage collection for the sahred lifetime management of arbitrary resources**
+- **Compared to unique_ptr, shared_ptr objects are typically twice as big, incur overhead for control blocks, and require atomic reference count manipulations**
+- **Default resource destruction is via delete, but custom deleters are supported. The type of the deleter has no effect on the type of the shared_ptr**
+- **Avoid creating shared_ptrs from variables of raw pointer type**
+
+### Item 20: Use `std::weak_ptr` for `std::shared_ptr`-like pointers that can dangle
+
+- weak_ptr can't be dereferenced or tested for nullness
+- weak_ptr it not a stand-alone pointer, but an augmentation of shared_ptr
+- weak_ptrs typically created from shared_ptrs, point to the same place but do not affect the reference count
+- if weak ptr dangles it is said to be expired (you can use `expired()` function to check that)
+- to check if weak_ptr not expired and get access to the object it points to - create a shared_ptr from a weak_ptr (need to be an atomic action)
+- weak_ptrs useful for caching, observer patterns or cyclic pointing
+- using weak_ptr to break cycles of shared_ptrs is not very common
+
+**TLDR:**
+- **Use weak_ptr for shared_ptr-like pointers that can dangle**
+- **Potential use cases for weak_ptr include caching, observer lists and prevention of shared_ptr cycles**
+
+### Item 21: Prefer `std::make_unique` and `std::make_shared`to direct use of new
+
+- std::make_unique not part of C++11
+- make_unique just perfect-forwards its parameters to the constructor of the object being created, constructs a unique_ptr from the raw pointer new produces, and returns the unique_ptr
+- make_unique and make_shared are two of the three `make functions` - functions that take an arbitrary set of arguments, perfect-forward them to the constructor for the dynamically allocated object, and return a smart pointer to that object
+- the third function is `std::allocate_shared` - acts like make_shared but its first argument is an allocator object to be used for the dynamic memory allocation
+- using new requires repeating type name -> code duplication
+- another reason to use make functions - exception safety -> between the new creation and constructor of the pointer, some other function might throw exception
+- same reasoning with unique_ptr
+- using make_shared also improves efficiency - with using new two memory allocations take place - one for the object and one for the control block; make_shared allocated single chunk of memory for both
+- there are circumstances when make functions can't or shouldn't be used, e.g. when in need for custom deleter or when working with braced initializers
+- control block has a second reference count i.e. "weak count" - counts number of weak pointers refering to control block (in practice not only the case, though)
+
+**TLDR:**
+- **Compared to direct use of new, make functions eliminate source code duplication, improve exception safety, and, for std::make_shared and stdd:allocate_shared, generate code that's smalled and faster**
+- **Situations where use of make functions is inappropriate include the need to specify custom deleters and a desire to pass braced initializers**
+- **For std::shared_ptrs, additional situations where make functions may be ill-advised include (1) classes with custm memory management and (2) systems with memory concerns, very large objects, and std::weak_ptrs that outlive the corresponding shared_ptrs**
+
+### Item 22: When using the Pimpl Idiom, define special member functions in the implementation file
+
+- Pimpl idiom - technique where you replace the data members of a class with a pointer to an implementation class (or struct), put the data members that used to be in the primary class into the implementation class, and access those data members indirectly through the pointer
+- done to reduce compilation time -don't need to imclude headers for all members
+- e.g.:
+```C++
+class Widget {
+    public:
+        Widget();
+        ...
+    private:
+        std::string name;
+        std::vector<doube> data;
+        Gadget g1, g2;
+}
+
+// changed into this:
+
+class Widget {
+    public:
+        Widget();
+        ~Widget();
+        ...
+    private:
+        struct Impl;        // declare implementation struct
+        Impl *pImpl;        // and pont to it
+
+}
+```
+- type that's been declared, but not defined = "incoplete type"
+- declaring a pointer to an incomplete type is allowed, pimpl takes advantage of that
+- in the example above headers would be moved from Widget.h (visible to and used by Widget clients) to Widget.cpp (visible to and used by Widget implementer only)
+- in modern C++ use unique_prt for pImpl
+- classes using Pimpl idiom are natural candidates for move support
+
+**TLDR:**
+- **The Pimpl Idiom decreases build times by reducing compilation dependencies between class clients and class implementations**
+- **For std::unique_ptr pImpl pointers, declare special member functions in the class header, but implement them in the implementation file. Do this even if the default function implementations are acceptable**
+- **The above advice applies to unique_ptr, but not to shared_ptr**
+
+****
+
