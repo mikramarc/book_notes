@@ -617,3 +617,173 @@ class Widget {
 
 ****
 
+## Move semantics and Perfect Forwarding
+
+### Item 23: Understand `std::move` and `std::forward`
+
+- std::move doesn't move anything, std::forward, doesn't forward anything; at runtime neither does anything at all
+- they are function templates that perform casts - std::move casts its argument to an rvalue, while std::forward performs this cast only if a particular condition is fulfilled
+- applying std::move to an object tells the compiler that the object is eligible to be moved from
+- in truth, rvalues are only usually candidates for moving
+- don't declare objects const if you want to be able to move from them (moving a value out of an object generally modifies the object, so the language shouldnnot permit const objects to be passed to functions that could modify them) - move requests on const objects are silently transformed into copy operations
+- std::move not only doesn't actually move anything, it doesn't even guarantee that the object it's casting will be eligible to be moved
+- std::forward is a conditional cast - it casts to an rvalue only if its argument was initialized with an rvalue
+- all function parameters are lvalues!
+- std::move attractions: voncenience, reduced likelihood of error and greater clarity
+- std::move typically sets up a move, while std::forward passes - forwards - an object to another function in a way that retains its original lvalueness or rvalueness
+
+**TLDR:**
+- **std::move performs an unconditional cast to an rvalue. In and of itself, it doesn't move anything**
+- **std::forward casts its argument to an rvalue only if that argument is bound to an rvalue**
+- **neither std::move nor std::forwards do anything at runtime**
+- **Move requests on const objects are treated as copy requests**
+
+### Item 24: Distinguish universal references from rvalue references
+
+- `T&&` has two different meanings - (1) rvalue reference - bind to rvalue only, reason: identify objects that may be moved from, (2) either rvalue referece or lvalue reference  - can bind to virtually anything
+- (2) are universal references
+- universal references arise in two contexts: (1) function template parameters, e.g.:
+```C++
+template<typename T>
+void f(T&& param);
+```
+(2) auto declarations, e.g.:
+```C++
+auto&& var2 = var1;
+```
+- what those contexts have in common is type deduction
+- if you see `T&&` without type deduction, it's rvalue reference
+- push_back doesn't employ type deduction, while emplace_back does
+- variables declared with the type auto&& are universal references (type deduction takes place adn they form of T&&)
+
+**TLDR:**
+- **If a function template parameter has a type T&& for a deduced type T, or if an object is declared using auto&&, the parameter or object is a universal reference**
+- **If the form of the type declaration isn't precisely `type&&`, or if type deduction does not occur, type&& denotes an rvalue referece**
+- **Universal references correspond to rvalue references if they're initialized with rvalues. They correspond to lvalue references if they're initialized with lvalues**
+
+### Item 25: Use std::move on rvalue references, and std::forward on universal references
+
+- rvalue references bind only to objects that are candidates for moving
+- universal references should be cast to rvalues only if they were initialized with rvalues
+- rvalue references should be *unconditionally* cast to rvalues (with std::move) when forwarding them to other functions, because theu're *always* bound to rvalues, and universal references should be *conditionally* cast to rvalues (via std::forward) when forwarding them, becasue they're only *sometimes* bound to rvalues
+- you should avoid using std::forward with rvalue references, and avoid using std::move with universal references
+- using std::move for universal reference might lead to variables coming back from calls with unspecified values
+- make sure you move/forward only when you are done with it
+- if you have a function that returns by value and you're returning an object bound to an rvalue reference or a universal reference, you'll want to apply std::move or std::forward when you retrun the reference
+- return value optimization (RVO) - automatic optimization procedure in C++ where local variable that's about to be returned from a function is constructed in the memory alloted for the function's return value
+- RVO conditions: (1) the type of the local object is the same as that returned by the function, (2) the local object is what's being returned
+- using std::move can actually hinder performance by preventing RVO
+
+**TLDR:**
+- **Apply std::move to rvalue references and std::forward to universal references the last time each is used**
+- **Do the same thing for rvalue references adn universal references being returned from functions that return by value**
+- **Never apply std::move or std::forward to local objects if they would otherwise be eligible for the return value optimization**
+
+### Item 26: Avoid overloading on universal references
+
+- use universal references to move values down the chain, rather than copy
+
+```C++
+std::multiset<std::string> names;
+
+template<typename T>
+void add(T&& name)
+{
+    // names is global
+    names.emplace(std::forward<T>(name));
+}
+
+add(std::string("Burek"));  // move rvalue instead of copying it
+add("Reksio")  // create std::string in multiset instead of copying a temporary std::string
+```
+- exact match (e.g. T deduced to be short&) beats match with promotion (e.g. short to int) -> universal reference overload might be a better match than overload with arg passed to overloaded function where match with promotion takes place - could lead to errors!
+- universal reference overload vacuums up far more argument types than the developer doing the overloading generally expects
+
+**TLDR:**
+- **Overloading on universal references almost always leads toi the universal references overload being called more frequently than expected**
+- **Perfect-forwarding constructors are especially problematic, because they're typically better matches than copy constructors for non-const lvalues, and they can hijack class calls to base class copy and move constructors**
+
+### Item 27: Familiarize yourself with alternatives to overloading on universal references
+
+Alternatives include:
+
+- abandoning overloading, e.g. use different name for the would-be overload
+- passing by const T& - using instead of universal reference. Drawback - not as efficient
+- passing by value
+- using tag dispatch - if the universal reference is part of a parameter list containing other parameters that are NOT universal references, sufficiently poor matches on the non-universal reference parameters can knock an overload with a universal reference out of the running, e.g.:
+```C++
+...
+functionImpl(std::forward<T>(name),
+             std::is_integral<typename std::remove_reference<T>::type>());
+```
+- constraining templates that take universal references - sometimes compiler-generated functions bypass the tag dispatch design, use std::enable if to force compilers to behave as if a particular template didn't exist (template enabled only if specific condition satisfied)
+- std::decay typoe trait strips type of any references or cv-qualifiers
+- std::base_of type trait determines whether one type is derived from another
+- as a rule, perfect forwarding is more efficient than specifying a type for each parameter, because it avoids creation of temporary objects solely for the purpose of conforming to the typoe of a parameter declaration
+- drawbacks of perfect forwarding - some kinds of arguments can't be perfect forwarded; another issue is that comprehensibility of error messages when clients pass invalid arguments
+
+**TLDR:**
+- **Alternatives to the combination of universal references and overloading include the use of distinct function names, passing parameters by lvalue-reference-to-const, passing parameters by value, and using tag dispatch**
+- **Constraining templates via `std::enable_if`permits the use of universal references and overloading together, but it controls the conditions under which compilers may use the universal reference overloads**
+- **Universal referenc parameters often have efficiency advantages, but they typically have usability disadvantages**
+
+### Item 28: Understand reference collapsing
+
+- when an argument is passed to a template function, the type deduced for the template parameter encodes whether the argument is an lvalue or an rvalue - but only when the argument is used to initialize a parameter that's a universal referece
+- for this template:
+```C++
+template<typename T>
+void func(T&& param);
+```
+the deduced template parameter T will encode whether the argument passed to param was an lvalue or an rvalue
+- lvalues are encoded as lvalue references, but rvalues are encoded as non-references
+- references to references are illegal in C++
+- you are forbidden from declaring references to references, BUT compilers may produce them in particular contexts, template instantiation among them -> when that happens, reference collapsing dictates what happens next
+- rule for reference collapsing: if either reference is anlvalue reference, the result is an lvalue reference. Otherwise (i.e., if both are rvalue references) the result is an rvalue reference
+- reference collapsing is a key part of what make std::forward work
+- universal reference is actually an rvalue reference in a context where two conditions are satisfied: (1) type deduction distinguishes lvalues from rvalues, (2) reference collapsing occurs
+
+**TLDR:**
+- **Reference collapsing occurs in four contexts: template instantiation, auto type generation, creation and use of typedefs and alias declarations, and decltype**
+- **When compilers generate a reference to a reference is a reference collapsing context, the result becomes a single referece. If either of the original references is an lvalue reference, the result is an lvalue reference. Otherwise it's an rvalue reference**
+- **Universal references are rvalue references in contexts where type deduction distinguishes lvalues from rvalues and where reference collapsing occurs**
+
+### Item 29: Assume that move operations are not present, not cheap, and not used
+
+- many types fail to support move semantics
+- all standard C++11 containers support moving, but not all are cheap to move
+- e.g. data for a std::array contents is stored directly in the std::array object -> moving runs in linear time
+- Small String Optimization (SSO) allows for "small" strings to be stored in a buffer witin the string object and makes moving no faster than copying
+- with strong exception safety guarantees, the underlying copy operations may be repalaced with move operations only if the move operations are known to not throw
+- move semantics do you no good in such cases:
+    - no move operations
+    - move not faster
+    - move not suitable
+    - source object is lvalue
+
+**TLDR:**
+- **Assume that move operations are not present, not cheap, and not used**
+- **In code with known types or support for move semantics, there is no need for assumptions**
+
+### Item 30: Familiarize yourself with perfect forwarding failure cases
+
+- in "perfect forwarding" - forwarding means that one function passes (forwards) its parameters to another function, the goal is for the second function to receive the same objects that the first function received
+- the above rules out by-value parameters (because they're copies) and pointer parameters (we don't want to force callers to pass pointers) => in perfect forwarding generally we're dealing with references
+- PF means also that salient characteristics are forwarded (types, "side-value", etc) => we'll be using universal references because only UR parameters encode information about the lvalueness and rvalueness
+- perfect forwarding fails if calling wrapper function with a particular argument does different thing than calling a wrapped function with the same argument
+- braced initializers is a perfect forwarding failure case
+- PF fails when either of the following occurs:
+    - compilers are unable to deduce a type
+    - compilers deduce the "wrong" type
+- compilers are forbidden from deducing a type for the expression `{1, 2, 3}` in a forwarding function if it's not declared to be a std::initializer_list - can be worked around using `auto`
+- neither 0 or NULL can be perfect-forwarded as a null pointer - easy fix: just pass nullptr
+- as a general rule, there's no need to define integral static const and constexpr data members in classes - declarations alone suffice -> compilers perform const propagation, eliminating the need to set aside memory for them
+- references in the code generated by compilers are usually treated like pointers
+- when bitfield is used as a function argument = another case for perfect forwarding failure ("a non-const reference shall not be bound to a bit-field")
+
+**TLDR:**
+- **Perfect forwarding fails when template type deduction fails or when it deduces the wrong type**
+- **The kinds of arguments that lead to perfect forwarding failure are braced initializers, null pointers expressed as 0 or NULL, declaration-only integral const static data members, template and overloaded function names, and bitfields**
+
+****
+
