@@ -887,3 +887,31 @@ auto f [](auto&& x) { return normalize(std::forward<decltype(x)>(x)); };
 
 ****
 
+## The Concurrency API
+
+### Item 35: Prefer task-based programming to thread-based
+
+- to do asynchronous tasks, you can use `std::thread` (thread-based) or `std::async` (task-based)
+- function object passed to std::async is considered a task
+- task-based typically superior to thread-based
+- with async you get a future return value, and can handle exceptions
+- three meanings of "thread" in concurrent C++ software:
+    1) hardware threads (within CPU core)
+    2) software threads (threads that operating system manages)
+    3) std::threads (objects in a C++ process that act as handles to underlying software threads)
+- if thread "joined" - the function it is to run finished, if "detached" - the connection between it and underlying software thread has been severed
+- if you create more software threads than system can provide, std::system_error is thrown (could happen even for noexcept functions)
+- another trouble you can see - oversubscription: when there are more ready-to-run (unlocked) software threads than hardware threads
+- avoiding oversubscriptions difficult
+- using std::async shofts the thread management responsibility to the implementer of the C++ Standard Library
+- task-based design spares you the travails of manual thread management, and it provides a natural way to examine the results of asynchronously executed functions
+- some situations where using threads directly may be appropriate:
+    - if you need access to the API of the underlying threading implementation
+    - if you need to and are able to optimize thread usage for your application
+    - if you need to implement threading technology beyond the C++ concurrency API
+
+**TLDR:**
+- **the std::thread API offers no direct way to get return values from asynchronously run functions, and if those functions throw, the program is terminated**
+- **Thread-based programming calls for manual management of thread exhaustion, oversubscription, load balancing, and adaptation to new platforms**
+- **Task-based programming via std::async with the default launch policy handles most of the issues for you**
+
