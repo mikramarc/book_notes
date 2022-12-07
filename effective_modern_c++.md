@@ -915,3 +915,92 @@ auto f [](auto&& x) { return normalize(std::forward<decltype(x)>(x)); };
 - **Thread-based programming calls for manual management of thread exhaustion, oversubscription, load balancing, and adaptation to new platforms**
 - **Task-based programming via std::async with the default launch policy handles most of the issues for you**
 
+### Item 36: Specify std::launch::async if asynchronicity is essential
+ - when using std::async request that the function be run in accord with a std::async "launch policy"
+ - there are two standard policies:
+    1) std::launch::async policy means that function must be run asynchronously, i.e. on a different thread
+    2) std::launch_deferred policy means that function may run only when get or wait is called on the future returned by std::async (bit of a simplification)
+- std::async's default launch policy - neither of the above, it's both "or-ed" together = by default function can be run either asynchronously or synchronously
+- with default policy, give a thread t executing statement `auto fut = std::async(f)`:
+    - it's not possible to predict whether f will run concurrently with t
+    - it's not possible to predict whether f runs on a thread different from the thread invoking get or wait on fut
+    - it may not be possible to predict whether f funs at all
+- using std::async with default launch policy for a task is fine as long as the following conditions are fulfilled
+    - the task need not run concurrently with the thread calling get or wait
+    - it doesn't matter which thread's thread_local variables are read or written
+    - either there's a guarantee that get or wait will be called on the future returned by std::async or it's acceptable that the task may never execute
+    - code using wait_for or wait_until takes the possibility of deferred status into account
+- if any of the above fails to hold, you want to guarantee that std::async schedules the task for truly asynchronous execution
+
+**TLDR:**
+- **The default launch policy for std::async permits both asynchronous and synchronous task execution**
+- **The flexibility leads to uncertainty when accessing thread_locals, implies that the task may never execute, and affects program logic for timeout-based wait calls**
+- **specify std::launch::async if asynchronous task execution is essential**
+
+### Item 37: Make std::thread unjoinable on all paths
+
+- two states for std::thread objects - joinable and unjoinable
+- joinable corresponds to an underlying asychronous thread of execution that is or could be running
+- unjoinable std::thread objects include: (1) default-constructed std::threads, (2) std::thread objects that have been moved from, (3) std::threads that have been joined, (4) std::threads that have been detached
+- if the destructor for a joinable thread is invoked, execution of the program (i.e., all threads) is terminated
+- C++14 allows apostrophe as a digit separator, e.g.:
+```C++
+constexpr auto num = 10'000'000;  // ten million
+```
+- in case of exception (or code failing to join a thread), the std::thread object will be joinable when its destructor is called at the end of a scope
+- destruction of a joinable thread causes program termination
+- you have to ensure that if you use std::thread object, it's made unjoinable on every path out of the scope in which it's defined
+- an option to deal with this is to create a thread RAII class
+- std::thread objects aren't copyable
+
+**TLDR:**
+- **Make std::threads unjoinable on all paths**
+- **join-on-destruction can lead to difficult-to-debug performance anomalies**
+- **detach-on-destruction can lead to difficult-to-debug undefined behaviors**
+- **Declare std::thread objects last in lists of data members**
+
+### Item 38: Be aware of varying thread handle destructor behavior
+
+- destruction of a joinable std::thread terminates your program, yet the destructor for a future sometimes behaves as iuf it did an implicit join, sometimes as if it did implicit detach, and sometimes neither - it never causes program termination though
+- future - one end of a communications channel through which a callee transmits a result to a caller
+- callee writes thre result of its computation into the communications channel (typically via a std::promise object) and the caller reads that result using a future
+- callee's result stored in so-called "shared state"
+- the destructor for the last future referring to a shared state for a non-deferred task launched via std::async blocks until the task completes
+- the destructor for all other futures simply destroys the future object
+
+**TLDR**
+- **Future destructors normally just destroy the future's data members**
+**The final future referring to a shared state for a non-deferred task launched via std::asyc blocks until the task completes**
+
+### Item 39: Consider void futures for on-shot event communication
+
+- sometimes it's useful for one task to tell a second async task that a particular event has occured
+- one strategy: reacting tgask wait on a condition variable, and the detecting thread notifies the condvar whan the event occurs
+- another way is a shared boolean flag - problem is that reacting task occupies a thread while waiting - condvar approach doesnt have that issue
+- std::promise can be set only once
+
+**TLDR:**
+- **For simple event communication, condvar-based designs require a superfluous mutex, impose constraints on the relative progress of detecting and reacting tasks, and require reacting tasks to verify that the event has taken place**
+- **Designs employing a flag avoid those problems, but are based on polling, not blocking**
+- **A condvar and flag can be used together, but the resulting communications mechanicm is somewhat stilted**
+- **Using std::promises and futures dodges these issues, but the approach uses head memory for shared states, and it's limited to on-shot communication**
+
+### Item 40: Use std::atomic for concurrency, volatile for special memory
+
+- instantiations of std::atomic offer operations that are guaranteed to be seens as atomic by other threads - operations on it behave more or less as if tey were inside a mutex-protected critical section
+- with std::atomic even member functions like RMW (read-modify-write, e.g. -- operator) are guaranteed to be seen by other threads as atomic
+- volatile does NOT work as std::atomic in multithreaded programs
+- compilers may reorder assignments of independent variables (underlying hardware might do that too)
+- however, no code that precedes a write of std::atomic varibale may take place afterwards (copilers enforce that for hardware too) -> no such thing with volatile
+- volatile if for telling compilers that they're dealing with memory that doesn't behave normally
+- "special" memoryu used for memory-mapped I/O, e.g. with peripherals like external sensors, displays, printers, etc. (rather than reading or writting normal memory, e.g. RAM)
+- essentially volatile tells the compiler - "Don't perform any optimizations on operations on this memory"
+- copy construction is not supported for std::atomic
+- std::atomic useful for concurrent programming, but not for accessing special memory; volatile is useful for accesssing special memory, but not for concurrent programming
+
+**TLDR:**
+- **std::atomic is for data accessed from multiple threads without using mutexes. It's a tool for writing concurrent software.**
+- **volatile is for memory where reads and writes should not be optimized away. It's a toll for working with special memory.**
+
+****
+
