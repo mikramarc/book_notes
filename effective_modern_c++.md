@@ -1004,3 +1004,37 @@ constexpr auto num = 10'000'000;  // ten million
 
 ****
 
+## Tweaks
+
+### Item 41: Consider pass by value for copyable parameters that are cheap to move and always copied
+
+- instead of making two functions that take arguments by const reference and rvalue reference, consider just making one that takes arguments by value - take by value and std::move-it, in that case its copied only for lvalues, but moved for rvalues
+- consider pass by value ONLY for copyable parameters
+- Pass by value is worth considering only for parameters that are cheap to move
+- consider pass by value only for parameters that are always copied
+- pass by value, unline pass-by-reference is susceptible to slicing problem
+
+**TLDR:**
+- **For copyable, cheap-to-move parameters that are always copied, pass by value may be nearly as efficient as pass by reference, it's easier to implement, and it can generate less object code**
+- **For lvalue arguments, pass by value (i.e., copy construction) followed by move assignment may be significantly more expensive than pass by reference followed by copy assignment**
+- **Pass by value is subject to the slicing problem, so it's typically inappropriate for base class parameter types**
+
+### Item 42: Consider emplacement instead of insertion
+
+- insertion doesn't always add the expected type to a conteiner, e.g. string literal into std::string container -> a temporary std::string object created and only than pushed back to the container (inefficient, two constructors, one destructor called)
+- remedy - emplace_back - constructs inside the vector, no temporaries involved
+- emplace_back uses perfect forwarding
+- emplacement functions have more flexible interface over incertion functions - insertion functions take objects to be inserted, emplacement functions take constructor arguments for objects to be inserted
+- there are some situations where insertion functions run quicker than emplacement - hard to characterize though
+- some heuristics to (almost) ensure emplacement being faster:
+    - the value being added is constructed into the container, not assigned (node-based containers virtually always use construction to add new values
+    - the argument type(s) being passed differ from the type held by the container
+    - the container is unlikely to reject the new value as a duplicate (contianer either permits duplicates or most of the values you add will be unique)
+- when working with containers of resource-managing objects, you muyst take care to ensure that if you choose an emplacement function over its insertion counterpart, you're not paying for improved code efficiency with diminished exception safety - that could be the case when using emplace (e.g. when using a emplace into vector of smart pointer with new operator)
+- copy initialization (e.g. `std::regex r1 = nullptr;`) is not permitted to use explicit constructors (direct (e.g. `std::regex r2(nullptr)`) is)
+- emplace functions use direct initialization, insertion functions copy initialization
+
+**TLDR:**
+- **In principle, emplacement functions should sometimes be more efficient than their insertion counterparts, and they should never be less efficient**
+- **In practice, they're most likely to be faster when (1) the value being added is constructed into the container, not assigned (2) the argument type(s) passed differ from the type held by the container (3) the container won't reject the value being added due to it being a duplicate**
+- **Emplacement functions may perform type conversions that would be rejected by insertion functions**
